@@ -1,6 +1,7 @@
 import { Stack } from 'expo-router'
 import { StatusBar } from 'expo-status-bar'
 import { ToastHost } from '@/components/ui/Toast'
+import CallProvider from '@/components/call/CallProvider'
 import { colors } from '@/constants/theme'
 import { useAuthBootstrap } from '@/hooks/useAuthBootstrap'
 import { useNotificationSubscription } from '@/hooks/useNotificationSubscription'
@@ -15,6 +16,8 @@ export default function Layout() {
     <>
       <StatusBar style="dark" />
       <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.white } }} />
+      {/* 통화 화면은 어느 화면 위에서든 떠야 해서 화면 묶음 바깥(위)에 둔다 */}
+      <CallProvider />
       <ToastHost />
     </>
   )
