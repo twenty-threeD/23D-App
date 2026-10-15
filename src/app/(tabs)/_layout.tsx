@@ -18,7 +18,6 @@ export default function Layout() {
       <Tabs.Screen name="index" options={{ href: null }} />
       <Tabs.Screen name="community" />
       <Tabs.Screen name="search" />
-      <Tabs.Screen name="upload" />
       <Tabs.Screen name="chat" />
       <Tabs.Screen name="blockchain" />
     </Tabs>

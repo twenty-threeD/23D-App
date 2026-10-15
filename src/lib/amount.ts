@@ -16,3 +16,19 @@ export function isBelowMinAmount(amount: number) {
 export function isAmountRejected(e: unknown, field: 'price' | 'amount') {
   return e instanceof ApiError && e.code === 'INVALID_ARGUMENT' && !!e.details?.[field]
 }
+
+// 서비스 등록 폼의 가격 상한. 웹 WriteInputField 의 MAX_PRICE 와 같다.
+// 웹은 대표 가격에만 걸었지만 플랜 가격도 문의·결제 금액으로 쓰이므로 같이 막는다
+export const MAX_PRICE = 2_000_000_000
+
+/** 가격 입력값에서 숫자만 남긴다. 상한을 넘으면 null 을 돌려줘 이전 값을 그대로 두게 한다 */
+export function toPriceDigits(input: string): string | null {
+  // 앞자리 0 을 남기면 화면(Number 로 바꿔 콤마 표시)과 저장값이 달라진다
+  const digits = input.replace(/[^0-9]/g, '').replace(/^0+(?=\d)/, '')
+  return Number(digits) > MAX_PRICE ? null : digits
+}
+
+/** 상태에 든 숫자 문자열을 입력칸에 보일 콤마 형식으로 바꾼다 */
+export function formatPriceInput(digits: string) {
+  return digits ? Number(digits).toLocaleString('ko-KR') : ''
+}
