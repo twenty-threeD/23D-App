@@ -189,13 +189,6 @@ export default function Page() {
         }
         connectedOnce = true
 
-        // 결제 승인 후 아직 못 보낸 결제 완료 알림이 있으면 여기서 보낸다(웹과 같은 접두사 규약)
-        const paid = useChatRoomsStore.getState().pendingPayment[roomId]
-        if (paid) {
-          sendChatMessage(stomp, roomId, `[결제 완료]\n${JSON.stringify(paid)}`)
-          clearPendingPayment(roomId)
-        }
-
         // 문의하기에서 새로 만들어진 방이면 연결 직후 인사말을 한 번 보낸다. 안내 카드로 그려야 해서 구조화된 내용을 싣는다
         if (useChatRoomsStore.getState().pendingGreeting[roomId]) {
           const service = useChatRoomsStore.getState().selectedService[roomId]
@@ -218,7 +211,18 @@ export default function Page() {
       stompClientRef.current = null
       setConnected(false)
     }
-  }, [roomId, hasToken, myUsername, clearPendingGreeting, clearPendingPayment, markRoomRead])
+  }, [roomId, hasToken, myUsername, clearPendingGreeting, markRoomRead])
+
+  // 결제 승인 후 아직 못 보낸 결제 완료 알림을 보낸다(웹과 같은 접두사 규약).
+  // 결제 화면은 이 방 위에 쌓였다가 닫히므로 방이 이미 연결된 채로 돌아오는 일이 많다.
+  // 연결될 때만 보내면 그 경우를 놓쳐서, 연결 상태와 대기열 둘 중 하나가 바뀔 때마다 확인한다
+  const pendingPaid = useChatRoomsStore((s) => (roomId ? s.pendingPayment[roomId] : undefined))
+  useEffect(() => {
+    const client = stompClientRef.current
+    if (!roomId || !pendingPaid || !connected || !client?.connected) return
+    sendChatMessage(client, roomId, `[결제 완료]\n${JSON.stringify(pendingPaid)}`)
+    clearPendingPayment(roomId)
+  }, [roomId, pendingPaid, connected, clearPendingPayment])
 
   // 캐시를 먼저 그려 네트워크를 기다리지 않게 하고, 서버에서 그 이후분만 받아 합친다
   useEffect(() => {
@@ -416,14 +420,14 @@ export default function Page() {
     // 문의를 시작할 때 고른 서비스. 결제 화면에서 그 플랜만 보여주기 위해 넘긴다
     const picked = useChatRoomsStore.getState().selectedService[roomId]
     router.push({
-      pathname: '/pay/[id]' as never,
+      pathname: '/pay/[id]',
       params: {
         id: String(selectedRoom.postId),
         contractId: String(completed.contractId),
         roomId: String(roomId),
         ...(picked?.planName ? { plan: picked.planName } : {}),
       },
-    } as never)
+    })
   }
 
   function openFile(url: string) {
