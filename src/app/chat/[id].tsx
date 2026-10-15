@@ -13,6 +13,7 @@ import {
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router'
 import { Image } from 'expo-image'
 import * as Clipboard from 'expo-clipboard'
+import { File } from 'expo-file-system'
 import { Ionicons, MaterialIcons } from '@expo/vector-icons'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import type { Client } from '@stomp/stompjs'
@@ -26,6 +27,8 @@ import ContractCard from '@/components/chat/ContractCard'
 import PaymentCard from '@/components/chat/PaymentCard'
 import DealCard from '@/components/chat/DealCard'
 import CallLogCard from '@/components/chat/CallLogCard'
+import ContractWizardModal from '@/components/chat/ContractWizardModal'
+import ContractViewerModal from '@/components/chat/ContractViewerModal'
 import { colors, FONT_FAMILY, radius } from '@/constants/theme'
 import { useAuthStore, decodeJwtUsername } from '@/store/authStore'
 import { useChatRoomsStore, type ChatRoom, type TradeStatus } from '@/store/chatRoomsStore'
@@ -48,7 +51,10 @@ import { getPost, getPostMainImage, type Post } from '@/lib/post'
 import { parseChatStart } from '@/lib/chatPreview'
 import { parseCallLog } from '@/lib/callLog'
 import { formatDealCancel, parseDealEnd, parseDealRequest } from '@/lib/deal'
-import { parseContractMessage, parsePaymentMessage, type CompletedContract, type Message } from '@/lib/chatMessages'
+import { parseContractMessage, parsePaymentMessage, type CompletedContract, type ContractData, type Message } from '@/lib/chatMessages'
+import { createContract, toContractDateTime } from '@/lib/contract'
+import { saveSignaturePng } from '@/lib/contractPdf'
+import { MIN_AMOUNT_MESSAGE, isAmountRejected } from '@/lib/amount'
 import { dateKey, formatDateWithWeekday, formatTime } from '@/lib/date'
 import { pickImages, pickPdf } from '@/lib/pickers'
 import { confirm } from '@/lib/dialog'
@@ -56,6 +62,15 @@ import { ApiError, isPayloadTooLarge } from '@/lib/apiError'
 import { useHandleError } from '@/hooks/useHandleError'
 
 const MAX_CHAT_FILE_SIZE = 25 * 1024 * 1024
+
+// 계약서 PDF·서명처럼 앱이 만들어 올린 임시 파일은 올린 뒤 지운다. 계약마다 1MB 가까이 캐시에 쌓이지 않게 한다
+function discardLocalFile(uri: string) {
+  try {
+    new File(uri).delete()
+  } catch {
+    // 이미 지워졌거나 지울 수 없어도 업로드는 끝났다
+  }
+}
 
 interface PendingImage {
   // 미리보기와 업로드 결과를 한 항목으로 묶는다. 배열 두 개로 따로 들면 일부만 실패하거나
@@ -112,6 +127,12 @@ export default function Page() {
   // 방금 복사한 트랜잭션 해시. 해시 줄에 잠깐 "복사됐어요"를 띄우는 데만 쓴다
   const [copiedHash, setCopiedHash] = useState<string | null>(null)
   const [dealBusy, setDealBusy] = useState(false)
+  const [contractModal, setContractModal] = useState<{ mode: 'propose' | 'review'; initial: Partial<ContractData> } | null>(null)
+  const [contractBusy, setContractBusy] = useState(false)
+  // 전화번호 인증 여부(서명 가능 조건)와 내 회원 ID(계약서 등록에 필요)
+  const [phoneVerified, setPhoneVerified] = useState<boolean | undefined>(undefined)
+  const [myMemberId, setMyMemberId] = useState<number | undefined>(undefined)
+  const [viewingContractUrl, setViewingContractUrl] = useState<string | null>(null)
   const [connected, setConnected] = useState(false)
 
   const stompClientRef = useRef<Client | null>(null)
@@ -290,10 +311,24 @@ export default function Page() {
     }
   }, [selectedPostId, token])
 
-  // 전화번호 인증 여부·내 회원 ID 는 계약서(다음 단계)에서 쓴다. 프로필은 캐시되어 미리 받아 둬도 비용이 거의 없다
+  // 전화번호 인증 여부(서명 가능 조건)와 내 회원 ID(계약서 등록에 필요)를 함께 받아 둔다. 프로필은 캐시되어 비용이 거의 없다
   useEffect(() => {
-    if (token) getMyProfile(token).catch(() => {})
-  }, [token])
+    const current = useAuthStore.getState().accessToken
+    if (!current) return
+    let cancelled = false
+    getMyProfile(current)
+      .then((res) => {
+        if (cancelled) return
+        setPhoneVerified(res.data?.phoneVerified ?? false)
+        setMyMemberId(res.data?.memberId)
+      })
+      .catch(() => {
+        if (!cancelled) setPhoneVerified(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [hasToken])
 
   const tradeStatus: TradeStatus = selectedRoom?.tradeStatus ?? 'IN_PROGRESS'
 
@@ -411,6 +446,88 @@ export default function Page() {
     setMessage('')
     setPendingImages([])
     setPendingDoc(null)
+  }
+
+  // 계약서 진행 순서: 을(글 올린 사람, 파는 쪽)이 [계약서 제안](propose) → 갑(문의한 사람, 사는 쪽)이
+  // 검토 후 서명하면 그 자리에서 양쪽 서명이 담긴 PDF 를 만들어 서버에 등록([계약서 체결 완료], review) → 갑이 결제.
+  // 서명은 PDF 안에 그림으로 이미 들어가므로 서버에 따로 서명하는 단계는 없다(웹과 같다).
+  //
+  // 갑·을은 등록하는 사람이 아니라 게시글 작성자로 정한다. 작성자가 을(professionalId)이고 채팅의 다른 쪽이 갑(clientId)이다.
+  // 서버가 게시글 작성자와 professionalId 가 같은지 검사하고, postId 를 빼면 계약이 게시글에 묶이지 않아 리뷰를 쓸 수 없다
+  async function handleContractSubmit(data: ContractData, pdf?: LocalFile) {
+    const current = useAuthStore.getState().accessToken
+    const client = stompClientRef.current
+    if (!current || !roomId || !contractModal || !selectedRoom) return
+    if (!client?.connected) {
+      toast.error('연결 중이에요. 잠시 후 다시 시도해주세요.')
+      return
+    }
+
+    setContractBusy(true)
+    try {
+      if (contractModal.mode === 'review') {
+        if (!pdf) return
+        const postId = selectedRoom.postId ?? null
+        let clientId: number | null | undefined = myMemberId
+        let professionalId: number | null | undefined = selectedRoom.participantId
+        if (postId) {
+          // 방에 들어올 때 이미 받아 둔 글이 있으면 다시 조회하지 않는다
+          const authorId = selectedPost?.id === postId ? selectedPost.member?.id : (await getPost(postId, current)).data?.member?.id
+          professionalId = authorId
+          clientId = authorId != null && authorId === myMemberId ? selectedRoom.participantId : myMemberId
+        }
+        if (!clientId || !professionalId) {
+          toast.error('계약 당사자 정보를 확인하지 못했습니다.')
+          return
+        }
+
+        const { url: contractUrl } = await uploadFile(current, pdf)
+        discardLocalFile(pdf.uri)
+        const contract = await createContract(current, {
+          contractUrl,
+          clientId,
+          professionalId,
+          postId,
+          startedAt: toContractDateTime(data.startDate),
+          endedAt: toContractDateTime(data.endDate, true),
+          inspectionPeriod: data.inspectionDays,
+          price: data.price,
+          servicesDescription: data.serviceContent,
+        })
+
+        // 결제에 필요한 값(금액·PDF 경로)을 메시지에 같이 싣는다
+        const completed: CompletedContract = { contractId: contract.id, price: data.price, contractUrl }
+        sendChatMessage(client, roomId, `[계약서 체결 완료]\n${JSON.stringify(completed)}`, [contractUrl])
+        setContractModal(null)
+        return
+      }
+
+      const myNewSig = myPartyRole === 'client' ? data.clientSig : data.professionalSig
+      let myUploadedSig = myNewSig
+      if (myNewSig.startsWith('data:')) {
+        // 서명은 계약서 PDF 를 만들 때 pdf-lib 의 embedPng 로 다시 읽으므로 PNG 를 그대로 올린다
+        const signatureFile = saveSignaturePng(myNewSig)
+        const { url } = await uploadFile(current, signatureFile, { keepOriginal: true })
+        discardLocalFile(signatureFile.uri)
+        myUploadedSig = url
+      }
+      const payload: ContractData = {
+        ...data,
+        clientSig: myPartyRole === 'client' ? myUploadedSig : data.clientSig,
+        professionalSig: myPartyRole === 'professional' ? myUploadedSig : data.professionalSig,
+      }
+      // 서명 주소는 내용 안에 이미 들어 있다. 첨부로도 보내면 채팅에 서명 이미지가 그대로 보여서 붙이지 않는다
+      sendChatMessage(client, roomId, `[계약서 제안]\n${JSON.stringify(payload)}`, [])
+      setContractModal(null)
+    } catch (e) {
+      if (isAmountRejected(e, 'price')) {
+        toast.error(MIN_AMOUNT_MESSAGE)
+        return
+      }
+      void handleError(e)
+    } finally {
+      setContractBusy(false)
+    }
   }
 
   // 계약 체결 후 결제 화면으로 이동한다.
@@ -548,7 +665,7 @@ export default function Page() {
           serviceContent={contractMsg.data.serviceContent}
           sentAt={msg.createdAt}
           settled={idx < lastCompletedIdx}
-          onReview={!isSent ? () => toast.info('계약서 서명은 다음 업데이트에서 지원돼요.') : undefined}
+          onReview={!isSent ? () => setContractModal({ mode: 'review', initial: contractMsg.data }) : undefined}
         />
       ) : (
         <ContractCard
@@ -558,7 +675,7 @@ export default function Page() {
           contractUrl={contractMsg.data.contractUrl}
           signedAt={msg.createdAt}
           paid={idx < lastPaymentIdx}
-          onViewContract={contractMsg.data.contractUrl ? () => openFile(contractMsg.data.contractUrl) : undefined}
+          onViewContract={contractMsg.data.contractUrl ? () => setViewingContractUrl(contractMsg.data.contractUrl) : undefined}
           onPay={myPartyRole === 'client' && selectedRoom.postId ? () => handlePayNavigate(contractMsg.data) : undefined}
         />
       )
@@ -696,7 +813,11 @@ export default function Page() {
                   color={colors.yellow400}
                   onPress={() => {
                     setShowAttach(false)
-                    toast.info('계약서 작성은 다음 업데이트에서 지원돼요.')
+                    setContractModal({
+                      mode: 'propose',
+                      // 금액은 계약서를 쓰는 을이 직접 입력한다(문의 때 고른 서비스 가격은 갑의 기기에만 남아 있어 여기서는 알 수 없다)
+                      initial: { clientName: selectedRoom?.participantName ?? '', professionalName: '' },
+                    })
                   }}
                 />
               ) : null}
@@ -779,6 +900,22 @@ export default function Page() {
       </KeyboardAvoidingView>
 
       <ImageLightbox src={lightboxSrc} onClose={() => setLightboxSrc(null)} />
+      {contractModal && myPartyRole ? (
+        <ContractWizardModal
+          myRole={myPartyRole}
+          mode={contractModal.mode}
+          initial={contractModal.initial}
+          busy={contractBusy}
+          phoneVerified={phoneVerified}
+          onClose={() => setContractModal(null)}
+          onOpenProfile={() => {
+            setContractModal(null)
+            router.push('/profile')
+          }}
+          onSubmit={(data, pdf) => void handleContractSubmit(data, pdf)}
+        />
+      ) : null}
+      {viewingContractUrl ? <ContractViewerModal url={viewingContractUrl} onClose={() => setViewingContractUrl(null)} /> : null}
     </View>
   )
 }
