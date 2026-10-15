@@ -55,3 +55,19 @@ export function previewOf(text: string) {
   }
   return text.replace(/\n+/g, " ")
 }
+
+// 채팅 목록 미리보기. 웹 채팅 페이지의 목록과 같은 문구다(알림용 previewOf 와 달리 이모지를 붙이지 않는다)
+export function roomPreviewOf(text: string) {
+  if (!text) return ""
+  if (text.startsWith("[계약서 제안]")) return "계약서를 보냈습니다."
+  if (text.startsWith("[계약서 체결 완료]")) return "계약이 체결됐습니다."
+  if (text.startsWith("[결제 완료]")) return "결제가 완료됐습니다."
+  if (text.startsWith("[거래 완료 요청]")) return "거래 완료를 기다리고 있어요."
+  if (text.startsWith("[거래 완료]")) return "거래가 완료됐습니다."
+  if (text.startsWith("[거래 취소]")) return "거래가 취소됐습니다."
+  const callLog = parseCallLog(text)
+  if (callLog) return previewCallLog(callLog)
+  const start = parseChatStart(text)
+  if (start) return start.planName ? `선택한 서비스: ${start.planName}` : "채팅을 시작했어요"
+  return text.replace(/\n+/g, " ")
+}
