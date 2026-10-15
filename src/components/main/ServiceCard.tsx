@@ -103,7 +103,9 @@ const styles = StyleSheet.create({
     width: ROW.width,
     height: ROW.height,
   },
+  // 웹 그리드는 한 줄의 카드가 같은 높이로 늘어나 '관련 더보기' 버튼이 맞춰진다. 그리드 칸을 꽉 채워 같은 효과를 낸다
   gridRoot: {
+    flex: 1,
     gap: 12,
   },
   top: {
