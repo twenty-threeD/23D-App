@@ -105,7 +105,7 @@ export function TermsAgreement({ onNext }: { onNext: () => void }) {
       <View style={styles.rule} />
       {/* 약관 문서가 있는 항목은 앱의 약관 화면으로, 아직 없는 항목은 웹처럼 준비 중 안내로 보낸다 */}
       <CheckRow checked={terms.service} onToggle={() => toggle('service')} essential label="'잇다' 서비스 이용약관" link="/eula" />
-      <CheckRow checked={terms.privacy} onToggle={() => toggle('privacy')} essential label="개인정보 수집 및 이용 동의" link="/privacy" />
+      <CheckRow checked={terms.privacy} onToggle={() => toggle('privacy')} essential label="개인정보 수집 및 이용 동의" link="/privateinfo" />
       <CheckRow
         checked={terms.thirdParty}
         onToggle={() => toggle('thirdParty')}

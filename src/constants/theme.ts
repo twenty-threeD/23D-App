@@ -7,6 +7,10 @@ export const colors = {
   // 웹의 hover:bg-orange-600. 앱에는 hover 가 없어 누르고 있을 때 색으로 쓴다
   mainPressed: '#EA580C',
   mainSoft: 'rgba(254, 106, 76, 0.1)',
+  // 웹 bg-main/5: 펼친 자주 묻는 질문·눌린 안내 카드 바탕
+  mainFaint: 'rgba(254, 106, 76, 0.05)',
+  // 웹 border-main/40: 약관 조항 왼쪽 세로줄
+  mainLine: 'rgba(254, 106, 76, 0.4)',
   // --color-contract: 계약서 본문색
   contract: '#1A2747',
   // 본문 텍스트 3단계 + 힌트
