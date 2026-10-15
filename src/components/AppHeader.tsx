@@ -1,5 +1,6 @@
-import { Pressable, StyleSheet, View } from 'react-native'
-import { useEffect } from 'react'
+import { Animated, Pressable, StyleSheet, View } from 'react-native'
+import { useEffect, useRef, useState } from 'react'
+import { Ionicons } from '@expo/vector-icons'
 import { router } from 'expo-router'
 import { Image } from 'expo-image'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
@@ -8,8 +9,43 @@ import { Avatar } from '@/components/PostImage'
 import { colors, PAGE_X } from '@/constants/theme'
 import { useAuthStore } from '@/store/authStore'
 import { useProfileStore } from '@/store/profileStore'
+import { useNotificationStore } from '@/store/notificationStore'
 import { getMyProfile } from '@/lib/profile'
 import { SIGNIN_PATH } from '@/lib/navigation'
+
+// 알림 벨. 새 알림이 오면 웹처럼 잠깐 흔들고, 안 읽은 알림이 있으면 점을 띄운다
+function NotificationBell() {
+  const count = useNotificationStore((s) => s.notifications.length)
+  const [shake] = useState(() => new Animated.Value(0))
+  const prevCount = useRef(count)
+
+  useEffect(() => {
+    // 늘었을 때만 흔든다. 읽어서 줄어든 건 새 알림이 아니다
+    if (count > prevCount.current) {
+      shake.setValue(0)
+      Animated.timing(shake, { toValue: 1, duration: 600, useNativeDriver: true }).start()
+    }
+    prevCount.current = count
+  }, [count, shake])
+
+  const rotate = shake.interpolate({
+    inputRange: [0, 0.15, 0.3, 0.45, 0.6, 0.75, 1],
+    outputRange: ['0deg', '14deg', '-12deg', '10deg', '-8deg', '4deg', '0deg'],
+  })
+
+  return (
+    <Pressable
+      onPress={() => router.push('/notifications')}
+      accessibilityLabel={count > 0 ? `알림 ${count}개` : '알림'}
+      style={({ pressed }) => [styles.bell, pressed && styles.bellPressed]}
+    >
+      <Animated.View style={{ transform: [{ rotate }] }}>
+        <Ionicons name="notifications-outline" size={21} color={colors.zinc600} />
+      </Animated.View>
+      {count > 0 ? <View style={styles.dot} /> : null}
+    </Pressable>
+  )
+}
 
 // 탭 화면 위쪽 머리줄. 웹 모바일 헤더처럼 로고·로그인/프로필만 두고 메뉴는 하단 탭으로 옮겼다
 export default function AppHeader({ right }: { right?: React.ReactNode }) {
@@ -37,6 +73,7 @@ export default function AppHeader({ right }: { right?: React.ReactNode }) {
         {token ? (
           <View style={styles.right}>
             {right}
+            <NotificationBell />
             <Pressable
               onPress={() => router.push('/profile')}
               accessibilityLabel="프로필"
@@ -98,6 +135,25 @@ const styles = StyleSheet.create({
   },
   avatarPressed: {
     borderColor: colors.main,
+  },
+  bell: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  bellPressed: {
+    backgroundColor: colors.zinc100,
+  },
+  dot: {
+    position: 'absolute',
+    top: 6,
+    right: 6,
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: colors.main,
   },
   authLinks: {
     flexDirection: 'row',
