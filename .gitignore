@@ -39,3 +39,12 @@ yarn-error.*
 # generated native folders
 /ios
 /android
+
+# env (공개용 예시만 커밋)
+.env
+!.env.example
+
+# 서명 키 (원스토어 업로드 키는 저장소 밖에 보관)
+*.keystore
+keystore.properties
+credentials.json
