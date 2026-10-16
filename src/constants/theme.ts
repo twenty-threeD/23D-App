@@ -73,6 +73,9 @@ export const colors = {
   callDock: '#17161C',
 
   backdrop: 'rgba(0, 0, 0, 0.4)',
+
+  // 마크다운 본문의 링크색(웹 마크다운 뷰어 기본값)
+  link: '#0969DA',
 } as const
 
 export type ColorName = keyof typeof colors
