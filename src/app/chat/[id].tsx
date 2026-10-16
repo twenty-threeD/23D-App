@@ -29,6 +29,9 @@ import DealCard from '@/components/chat/DealCard'
 import CallLogCard from '@/components/chat/CallLogCard'
 import ContractWizardModal from '@/components/chat/ContractWizardModal'
 import ContractViewerModal from '@/components/chat/ContractViewerModal'
+import CallSessionBubble from '@/components/chat/CallSessionBubble'
+import { useCallStore } from '@/store/callStore'
+import type { CallType } from '@/lib/call'
 import { colors, FONT_FAMILY, radius } from '@/constants/theme'
 import { useAuthStore, decodeJwtUsername } from '@/store/authStore'
 import { useChatRoomsStore, type ChatRoom, type TradeStatus } from '@/store/chatRoomsStore'
@@ -133,6 +136,9 @@ export default function Page() {
   const [phoneVerified, setPhoneVerified] = useState<boolean | undefined>(undefined)
   const [myMemberId, setMyMemberId] = useState<number | undefined>(undefined)
   const [viewingContractUrl, setViewingContractUrl] = useState<string | null>(null)
+  // 통화 화면 자체는 전역(CallProvider)이 그린다. 여기서는 거는 것과 이 방의 통화 카드만 맡는다
+  const callPhase = useCallStore((s) => s.phase)
+  const activeCall = useCallStore((s) => s.call)
   const [connected, setConnected] = useState(false)
 
   const stompClientRef = useRef<Client | null>(null)
@@ -530,6 +536,15 @@ export default function Page() {
     }
   }
 
+  function startCall(callType: CallType) {
+    const current = useAuthStore.getState().accessToken
+    if (!current || !selectedRoom) return
+    void useCallStore.getState().start(current, selectedRoom.roomId, callType, {
+      name: selectedRoom.participantName,
+      imageUrl: selectedRoom.participantImageUrl,
+    })
+  }
+
   // 계약 체결 후 결제 화면으로 이동한다.
   // 금액은 조작될 수 있어 주소에 싣지 않고, 결제 화면이 contractId 로 서버에서 다시 조회한다
   function handlePayNavigate(completed: CompletedContract) {
@@ -630,7 +645,24 @@ export default function Page() {
     const serverCall = msg.type === 'CALL' ? msg.call : null
     const callLog = serverCall ?? parseCallLog(msg.message)
     const iAmCaller = serverCall ? serverCall.callerUsername === myUsername : isSent
-    const callCard = callLog ? <CallLogCard log={callLog} isSent={isSent} iAmCaller={iAmCaller} /> : null
+    // 통화 기록을 누르면 같은 종류로 다시 건다. 이미 통화 중이면 누를 수 없고, 실수로 누르는 걸 막으려고 한 번 묻는다
+    const callCard = callLog ? (
+      <CallLogCard
+        log={callLog}
+        isSent={isSent}
+        iAmCaller={iAmCaller}
+        onCall={
+          callPhase === 'idle'
+            ? () => {
+                const kind = callLog.callType === 'VIDEO' ? '영상' : '음성'
+                void confirm(`${selectedRoom.participantName}님에게 ${kind} 통화를 걸까요?`, { confirmText: '걸기' }).then((ok) => {
+                  if (ok) startCall(callLog.callType)
+                })
+              }
+            : undefined
+        }
+      />
+    ) : null
 
     const dealReq = parseDealRequest(msg.message)
     const dealEnd = parseDealEnd(msg.message)
@@ -768,6 +800,12 @@ export default function Page() {
             </Text>
           ) : null}
         </View>
+        <Pressable onPress={() => startCall('VOICE')} disabled={callPhase !== 'idle' || !selectedRoom} hitSlop={4} accessibilityLabel="음성 통화" style={[styles.iconButton, callPhase !== 'idle' && styles.disabledButton]}>
+          <MaterialIcons name="call" size={21} color={colors.zinc600} />
+        </Pressable>
+        <Pressable onPress={() => startCall('VIDEO')} disabled={callPhase !== 'idle' || !selectedRoom} hitSlop={4} accessibilityLabel="영상 통화" style={[styles.iconButton, callPhase !== 'idle' && styles.disabledButton]}>
+          <MaterialIcons name="videocam" size={22} color={colors.zinc600} />
+        </Pressable>
         <Pressable onPress={() => void handleDeleteRoom()} hitSlop={8} accessibilityLabel="채팅방 나가기" style={styles.iconButton}>
           <Ionicons name="ellipsis-horizontal" size={20} color={colors.zinc500} />
         </Pressable>
@@ -784,6 +822,18 @@ export default function Page() {
             onEndReached={() => void loadOlder()}
             onEndReachedThreshold={0.3}
             maintainVisibleContentPosition={{ minIndexForVisible: 0 }}
+            // 뒤집힌 목록이라 머리 칸이 화면 맨 아래(최신 메시지 아래)다. 진행 중인 통화 카드를 대화 끝에 붙인다
+            ListHeaderComponent={
+              callPhase !== 'idle' && activeCall && selectedRoom && activeCall.roomId === selectedRoom.roomId ? (
+                <View style={styles.callSession}>
+                  <CallSessionBubble
+                    peerName={selectedRoom.participantName}
+                    peerImageUrl={selectedRoom.participantImageUrl}
+                    isSent={activeCall.caller.username === myUsername}
+                  />
+                </View>
+              ) : null
+            }
             keyboardShouldPersistTaps="handled"
           />
           {/* 뒤집힌 목록은 비었을 때 안내가 거꾸로 그려져 목록 밖에 겹쳐 둔다 */}
@@ -966,6 +1016,12 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  disabledButton: {
+    opacity: 0.4,
+  },
+  callSession: {
+    paddingTop: 12,
   },
   headerTexts: { flex: 1, gap: 2 },
   messages: {

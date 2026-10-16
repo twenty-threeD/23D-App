@@ -10,7 +10,11 @@
     "backgroundColor": "#ffffff",
     "ios": {
       "bundleIdentifier": "store.idta.app",
-      "supportsTablet": false
+      "supportsTablet": false,
+      "infoPlist": {
+        "NSMicrophoneUsageDescription": "음성·영상 통화에서 상대방과 대화하기 위해 마이크를 사용합니다.",
+        "NSCameraUsageDescription": "영상 통화에서 내 모습을 보여주기 위해 카메라를 사용합니다."
+      }
     },
     "android": {
       "package": "store.idta.app",
@@ -20,7 +24,10 @@
         "foregroundImage": "./assets/android-icon-foreground.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "permissions": [
+        "android.permission.BLUETOOTH_CONNECT"
+      ]
     },
     "plugins": [
       "expo-router",
@@ -80,7 +87,8 @@
       "expo-secure-store",
       "expo-sqlite",
       "@react-native-community/datetimepicker",
-      "expo-asset"
+      "expo-asset",
+      "expo-audio"
     ],
     "experiments": {
       "typedRoutes": true
