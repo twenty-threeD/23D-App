@@ -10,6 +10,7 @@ import {
   participantsOf,
   renewCallToken,
   startCall,
+  startScreenShare,
   stopScreenShare,
   updateCallMedia,
   type Call,
@@ -20,7 +21,7 @@ import {
 import { ApiError } from '@/lib/apiError'
 
 // 웹 store/callStore.ts 의 앱판. 상태 흐름은 웹과 같고, 미디어는 트랙 대신 원격 uid 로 들고 있다.
-// 앱은 화면공유를 보내지 않는다(받기만 한다). 대신 휴대폰은 수화부·스피커를 고를 수 있어 스피커 전환을 둔다
+// 휴대폰은 수화부·스피커를 고를 수 있어 웹의 출력 장치 선택 대신 스피커 전환을 둔다
 
 async function joinChannel(session: CallSession, video: boolean, stillConnecting: () => boolean) {
   callEngine.setScreenUids([session.call.caller.screenUid, session.call.callee.screenUid])
@@ -45,6 +46,7 @@ interface CallStore {
   micOn: boolean
   camOn: boolean
   speakerOn: boolean
+  screenOn: boolean
   busy: boolean
 
   remoteCamUid: number | null
@@ -75,6 +77,7 @@ interface CallStore {
   toggleCam: (token: string) => Promise<void>
   flipCamera: () => Promise<void>
   toggleSpeaker: () => void
+  toggleScreen: (token: string) => Promise<void>
   renew: (token: string) => Promise<void>
   reset: () => Promise<void>
 }
@@ -88,6 +91,7 @@ const initial = {
   micOn: true,
   camOn: false,
   speakerOn: false,
+  screenOn: false,
   busy: false,
   remoteCamUid: null,
   remoteScreenUid: null,
@@ -131,6 +135,7 @@ function messageOf(e: unknown): string {
   if (e instanceof MediaPermissionError) return e.message
   if (e instanceof ApiError) {
     if (e.code === 'CALL_ALREADY_IN_PROGRESS') return '이미 진행 중인 통화가 있어요.'
+    if (e.code === 'SCREEN_SHARE_OCCUPIED') return '상대방이 화면을 공유하고 있어요.'
     if (e.status >= 500) return `서버 오류로 통화를 시작하지 못했어요. (${e.status}${e.code ? ` ${e.code}` : ''})`
     return e.message
   }
@@ -361,9 +366,11 @@ export const useCallStore = create<CallStore>()((set, get) => ({
 
   // 끊기는 /end 하나로 통일한다. RINGING 이면 서버가 발신자는 취소, 수신자는 거절로 처리한다
   hangUp: async (token) => {
-    const { call } = get()
+    const { call, screenOn } = get()
     await get().reset()
     if (!call) return
+    // 공유 중에 끊으면 서버에 점유 상태가 남아 상대가 다음 통화에서 화면공유를 못 할 수 있어 먼저 푼다(웹과 같다)
+    if (screenOn) await stopScreenShare(token, call.callId).catch(() => {})
     await endCall(token, call.callId).catch(() => {})
   },
 
@@ -403,6 +410,34 @@ export const useCallStore = create<CallStore>()((set, get) => ({
     const next = !get().speakerOn
     callEngine.setSpeakerphone(next)
     set({ speakerOn: next })
+  },
+
+  toggleScreen: async (token) => {
+    const { screenOn, call, busy } = get()
+    if (!call || busy) return
+    set({ busy: true })
+    try {
+      if (screenOn) {
+        await callEngine.stopScreen()
+        set({ screenOn: false })
+        // 빼먹으면 서버에 점유 상태가 남아 상대가 화면공유를 못 한다
+        await stopScreenShare(token, call.callId).catch(() => {})
+      } else {
+        const session = await startScreenShare(token, call.callId)
+        try {
+          await callEngine.startScreen(session)
+          set({ screenOn: true, call: session.call })
+        } catch (e) {
+          // 권한 창에서 거부한 경우 등. 서버 점유는 풀어야 다음에 다시 시도할 수 있다
+          await stopScreenShare(token, call.callId).catch(() => {})
+          throw e
+        }
+      }
+    } catch (e) {
+      set({ error: messageOf(e) })
+    } finally {
+      set({ busy: false })
+    }
   },
 
   renew: async (token) => {
