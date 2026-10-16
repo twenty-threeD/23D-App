@@ -2,6 +2,9 @@
 // 값이 없을 때는 웹(next.config.ts·.example.env)과 같은 운영 주소를 쓴다
 export const API_URL = (process.env.EXPO_PUBLIC_API_URL ?? 'https://api.idta.store').replace(/\/$/, '')
 
+// 웹 서비스 주소. 결제창 웹뷰의 출처와 결제 후 돌아올 주소(앱이 가로채서 실제로 열리지는 않는다)에 쓴다
+export const WEB_URL = (process.env.EXPO_PUBLIC_WEB_URL ?? 'https://www.idta.store').replace(/\/$/, '')
+
 // 토스페이먼츠 결제창 연동 클라이언트 키(test_ck_… / live_ck_…)
 export const TOSS_CLIENT_KEY = process.env.EXPO_PUBLIC_TOSS_CLIENT_KEY ?? ''
 
