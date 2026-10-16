@@ -1,0 +1,70 @@
+{
+  "expo": {
+    "name": "잇다",
+    "slug": "itda",
+    "scheme": "itda",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "backgroundColor": "#ffffff",
+    "ios": {
+      "bundleIdentifier": "store.idta.app",
+      "supportsTablet": false
+    },
+    "android": {
+      "package": "store.idta.app",
+      "versionCode": 1,
+      "adaptiveIcon": {
+        "backgroundColor": "#FE6A4C",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      },
+      "predictiveBackGestureEnabled": false
+    },
+    "plugins": [
+      "expo-router",
+      "expo-status-bar",
+      "expo-image",
+      [
+        "expo-splash-screen",
+        {
+          "backgroundColor": "#ffffff",
+          "image": "./assets/splash-icon.png",
+          "imageWidth": 160
+        }
+      ],
+      [
+        "expo-font",
+        {
+          "android": {
+            "fonts": [
+              {
+                "fontFamily": "Pretendard",
+                "fontDefinitions": [
+                  { "path": "./assets/fonts/Pretendard-Regular.otf", "weight": 400 },
+                  { "path": "./assets/fonts/Pretendard-Medium.otf", "weight": 500 },
+                  { "path": "./assets/fonts/Pretendard-SemiBold.otf", "weight": 600 },
+                  { "path": "./assets/fonts/Pretendard-Bold.otf", "weight": 700 },
+                  { "path": "./assets/fonts/Pretendard-ExtraBold.otf", "weight": 800 }
+                ]
+              }
+            ]
+          },
+          "ios": {
+            "fonts": [
+              "./assets/fonts/Pretendard-Regular.otf",
+              "./assets/fonts/Pretendard-Medium.otf",
+              "./assets/fonts/Pretendard-SemiBold.otf",
+              "./assets/fonts/Pretendard-Bold.otf",
+              "./assets/fonts/Pretendard-ExtraBold.otf"
+            ]
+          }
+        }
+      ]
+    ],
+    "experiments": {
+      "typedRoutes": true
+    }
+  }
+}
