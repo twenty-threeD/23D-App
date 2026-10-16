@@ -6,6 +6,7 @@ import SearchBar from '@/components/SearchBar'
 import CardRow from '@/components/main/CardRow'
 import AdCard, { AdCardSkeleton } from '@/components/main/AdCard'
 import ServiceSection, { Empty, MoreLink } from '@/components/main/ServiceSection'
+import Footer from '@/components/main/Footer'
 import { colors, PAGE_X } from '@/constants/theme'
 import { CATEGORIES, getPostCategories, getPosts, type Post, type PostCategory } from '@/lib/post'
 import { invalidate } from '@/lib/cache'
@@ -146,14 +147,17 @@ export default function Page() {
 
       <ServiceSection title="이웃들이 많이 찾아요" loading={loading} posts={popularPosts} />
       <ServiceSection title="재방문율이 높아요" loading={loading} posts={revisitPosts} />
+
+      <Footer />
     </ScrollView>
   )
 }
 
 const styles = StyleSheet.create({
+  // 아래 여백은 푸터가 자기 안쪽 여백으로 끝낸다
   content: {
     gap: 56,
-    paddingVertical: 32,
+    paddingTop: 32,
   },
   hero: {
     gap: 36,
