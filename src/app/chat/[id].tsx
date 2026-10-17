@@ -142,6 +142,7 @@ export default function Page() {
   const [connected, setConnected] = useState(false)
 
   const stompClientRef = useRef<Client | null>(null)
+  const listRef = useRef<FlatList<Message>>(null)
   // 소켓 재연결 콜백은 연결 시점의 클로저라 최신 목록을 ref 로 읽는다
   const messagesRef = useRef<Message[]>([])
   useEffect(() => {
@@ -452,6 +453,8 @@ export default function Page() {
     setMessage('')
     setPendingImages([])
     setPendingDoc(null)
+    // 위쪽 지난 대화를 보다가 보내도 내 메시지가 보이도록 맨 아래(뒤집힌 목록의 0)로 내린다
+    listRef.current?.scrollToOffset({ offset: 0, animated: true })
   }
 
   // 계약서 진행 순서: 을(글 올린 사람, 파는 쪽)이 [계약서 제안](propose) → 갑(문의한 사람, 사는 쪽)이
@@ -814,6 +817,7 @@ export default function Page() {
       <KeyboardAvoidingView style={styles.flex} behavior="padding">
         <View style={styles.flex}>
           <FlatList
+            ref={listRef}
             data={reversed}
             inverted
             keyExtractor={(msg, index) => (msg.messageId != null ? String(msg.messageId) : `${msg.createdAt}-${index}`)}
@@ -821,7 +825,9 @@ export default function Page() {
             contentContainerStyle={styles.messages}
             onEndReached={() => void loadOlder()}
             onEndReachedThreshold={0.3}
-            maintainVisibleContentPosition={{ minIndexForVisible: 0 }}
+            // 위치 유지만 두면 새 메시지가 맨 아래에 붙을 때 화면이 그대로 남아 새 메시지가 아래로 가려진다.
+            // 맨 아래 근처에 있을 때는 새 메시지 쪽으로 따라 내려가고, 지난 대화를 보는 중이면 위치를 지킨다
+            maintainVisibleContentPosition={{ minIndexForVisible: 0, autoscrollToTopThreshold: 120 }}
             // 뒤집힌 목록이라 머리 칸이 화면 맨 아래(최신 메시지 아래)다. 진행 중인 통화 카드를 대화 끝에 붙인다
             ListHeaderComponent={
               callPhase !== 'idle' && activeCall && selectedRoom && activeCall.roomId === selectedRoom.roomId ? (

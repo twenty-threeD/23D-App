@@ -38,7 +38,10 @@ export default function PostImage({ uri, style, contentFit = 'cover', fallback =
 export function Avatar({ uri, size, style }: { uri: string | null | undefined; size: number; style?: StyleProp<ViewStyle> }) {
   return (
     <View style={[styles.avatar, { width: size, height: size, borderRadius: size / 2 }, style]}>
+      {/* 기본 프로필(로컬 에셋)로 먼저 그려졌다가 정보가 늦게 와서 원격 주소로 바뀌면 안드로이드에서 새로 불러오지 않고
+          기본 그림이 남는다(딥링크로 채팅방에 바로 들어올 때). 주소가 바뀌면 이미지를 새로 만들게 한다 */}
       <Image
+        key={uri ?? 'default'}
         source={uri ? { uri: toAbsoluteUrl(uri) } : DEFAULT_PROFILE}
         style={StyleSheet.absoluteFill}
         contentFit="cover"
