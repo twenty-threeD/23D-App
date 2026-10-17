@@ -73,3 +73,11 @@ $ANDROID_HOME/build-tools/<버전>/apksigner verify --print-certs android/app/bu
 - 통화 중 앱을 벗어나면 안드로이드가 마이크를 막을 수 있다(포그라운드 서비스 미적용).
 - 앱이 꺼져 있을 때의 전화·알림 푸시는 아직 없다(서버 푸시 연동 필요).
 - 소셜 로그인은 카카오·네이버만 지원한다(구글은 웹뷰 로그인을 막는다).
+
+## iOS (준비 상태)
+
+- 설정은 넣어 두었다: 번들 ID `store.idta.app`, 사진·카메라·마이크 사용 문구(한국어), 통화가 이어지도록 백그라운드 오디오(`UIBackgroundModes: audio`)
+- **빌드하려면 Xcode 26.4 이상이 필요하다**(Expo SDK 57 요구 사항). 26.0 에서는 `expo-modules-jsi` 의 Swift 6.2 문법(`weak let`)에서 막힌다
+- 시뮬레이터 실행: `npx expo run:ios --device "iPhone 17"`
+- 실기기·앱스토어: Apple Developer 팀 가입 후 Xcode 에서 서명 팀 지정, `ios/` 는 생성물이라 서명은 EAS Build 나 config plugin 으로 넣는다
+- 통화 화면공유(보내기)는 iOS 에서 방송 확장(ReplayKit Broadcast Upload Extension)이 따로 있어야 해서 아직 안드로이드만 지원한다(받기는 iOS 도 된다)
