@@ -19,12 +19,14 @@ const DURATION = 2000
 const MAX_VISIBLE = 3
 
 type Listener = (item: ToastItem) => void
-const listeners = new Set<Listener>()
+// RN Modal 은 별도 창이라 루트의 토스트가 그 아래에 깔려 보이지 않는다. 그래서 모달 안에도 호스트를 두고,
+// 가장 나중에 붙은(=맨 위에 떠 있는) 호스트 하나에만 보내 같은 토스트가 두 번 뜨지 않게 한다
+const listeners: Listener[] = []
 let nextId = 1
 
 export function showToast(message: string, type: ToastType = 'success') {
   const item = { id: nextId++, message, type }
-  listeners.forEach((listener) => listener(item))
+  listeners[listeners.length - 1]?.(item)
 }
 
 export const toast = {
@@ -73,16 +75,16 @@ function ToastRow({ item, onDone }: { item: ToastItem; onDone: (id: number) => v
   )
 }
 
-// 루트 레이아웃에 한 번만 둔다
+// 루트 레이아웃에 한 번 두고, 안에서 오류를 띄우는 RN Modal 마다 하나씩 더 둔다
 export function ToastHost() {
   const insets = useSafeAreaInsets()
   const [items, setItems] = useState<ToastItem[]>([])
 
   useEffect(() => {
     const listener: Listener = (item) => setItems((prev) => [...prev, item].slice(-MAX_VISIBLE))
-    listeners.add(listener)
+    listeners.push(listener)
     return () => {
-      listeners.delete(listener)
+      listeners.splice(listeners.indexOf(listener), 1)
     }
   }, [])
 

@@ -1,3 +1,4 @@
+import { File } from 'expo-file-system'
 import { throwApiError } from './apiError'
 import { API_URL } from './config'
 import { apiUrl } from './http'
@@ -63,8 +64,11 @@ export async function uploadFile(token: string, file: LocalFile, options: Upload
   const payload = options.keepOriginal ? file : await compressImage(file)
 
   const formData = new FormData()
-  // RN FormData 는 { uri, name, type } 로 기기 안의 파일을 그대로 실어 보낸다
-  formData.append('multipartFile', { uri: payload.uri, name: payload.name, type: payload.mimeType } as unknown as Blob)
+  // Expo SDK 57 은 전역 fetch 를 expo/fetch 로 바꾸는데, 이 fetch 는 RN 식 { uri, name, type } 파트를 받지 않고
+  // "Unsupported FormDataPart implementation" 으로 실패한다. bytes() 를 가진 파트는 그 바이트를 그대로 싣고
+  // name·type 은 파일명·Content-Type 헤더로 쓰므로, 기기 안의 파일을 그 모양으로 넘긴다
+  const part = { name: payload.name, type: payload.mimeType, bytes: () => new File(payload.uri).bytes() }
+  formData.append('multipartFile', part as unknown as Blob)
 
   const res = await fetch(apiUrl('/api/files/upload'), {
     method: 'POST',
