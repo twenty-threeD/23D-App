@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import { callEngine, ensureMediaPermission, MediaPermissionError, type CameraFacing, type RemoteVideoKind } from '@/lib/agoraEngine'
+import { callEngine, ensureMediaPermission, MediaPermissionError, type AudioOutput, type CameraFacing, type RemoteVideoKind } from '@/lib/agoraEngine'
 import {
   acceptCall,
   endCall,
@@ -21,7 +21,7 @@ import {
 import { ApiError } from '@/lib/apiError'
 
 // 웹 store/callStore.ts 의 앱판. 상태 흐름은 웹과 같고, 미디어는 트랙 대신 원격 uid 로 들고 있다.
-// 휴대폰은 수화부·스피커를 고를 수 있어 웹의 출력 장치 선택 대신 스피커 전환을 둔다
+// 웹의 출력 장치 선택 대신 휴대폰의 수화부·스피커·이어폰·블루투스 중 소리가 나올 곳을 고른다
 
 async function joinChannel(session: CallSession, video: boolean, stillConnecting: () => boolean) {
   callEngine.setScreenUids([session.call.caller.screenUid, session.call.callee.screenUid])
@@ -45,7 +45,10 @@ interface CallStore {
 
   micOn: boolean
   camOn: boolean
-  speakerOn: boolean
+  // 지금 소리가 나오는 곳. 고른 값이 아니라 SDK 가 알려준 실제 경로를 따른다
+  audioOutput: AudioOutput
+  // 이 통화 중에 붙은 이어폰·블루투스. 그쪽으로 듣다가 스피커로 바꿔도 다시 고를 수 있게 기억해 둔다
+  externalOutput: Extract<AudioOutput, 'headset' | 'bluetooth'> | null
   screenOn: boolean
   busy: boolean
 
@@ -76,7 +79,8 @@ interface CallStore {
   toggleMic: (token: string) => Promise<void>
   toggleCam: (token: string) => Promise<void>
   flipCamera: () => Promise<void>
-  toggleSpeaker: () => void
+  setAudioOutput: (output: AudioOutput) => void
+  selectAudioOutput: (output: AudioOutput) => void
   toggleScreen: (token: string) => Promise<void>
   renew: (token: string) => Promise<void>
   reset: () => Promise<void>
@@ -90,7 +94,8 @@ const initial = {
   peerImageUrl: null,
   micOn: true,
   camOn: false,
-  speakerOn: false,
+  audioOutput: 'earpiece' as AudioOutput,
+  externalOutput: null,
   screenOn: false,
   busy: false,
   remoteCamUid: null,
@@ -108,6 +113,19 @@ const PEER_RECONNECT_TIMEOUT_MS = 15_000
 const TOKEN_RENEW_ATTEMPTS = 3
 const TOKEN_RENEW_RETRY_MS = 5_000
 let peerLeftTimer: ReturnType<typeof setTimeout> | null = null
+// 이어폰·블루투스로 바꿨을 때 실제로 그쪽으로 갔는지 확인하는 시간
+const OUTPUT_CHECK_MS = 2_000
+let outputCheckTimer: ReturnType<typeof setTimeout> | null = null
+
+function clearOutputCheck() {
+  if (outputCheckTimer) clearTimeout(outputCheckTimer)
+  outputCheckTimer = null
+}
+
+// 휴대폰 통화처럼 음성은 수화부, 영상은 스피커로 시작한다(엔진의 기본 경로와 같다). 이어폰이 꽂혀 있으면 곧 SDK 가 고쳐 준다
+function defaultOutput(video: boolean): AudioOutput {
+  return video ? 'speaker' : 'earpiece'
+}
 
 function clearPeerLeftTimer() {
   if (peerLeftTimer) clearTimeout(peerLeftTimer)
@@ -221,7 +239,7 @@ export const useCallStore = create<CallStore>()((set, get) => ({
       peerNameHint: peer?.name ?? null,
       peerImageUrl: peer?.imageUrl ?? null,
       camOn: video,
-      speakerOn: video,
+      audioOutput: defaultOutput(video),
       // 건 사람은 지금 하려는 일이 통화뿐이라 전체화면에서 기다린다
       expanded: true,
     })
@@ -265,7 +283,7 @@ export const useCallStore = create<CallStore>()((set, get) => ({
     const { call, phase } = get()
     if (!call || phase !== 'incoming') return
     const video = call.callType === 'VIDEO'
-    set({ phase: 'connecting', speakerOn: video })
+    set({ phase: 'connecting', audioOutput: defaultOutput(video) })
     try {
       await ensureMediaPermission(video)
       const session = await acceptCall(token, call.callId)
@@ -312,7 +330,7 @@ export const useCallStore = create<CallStore>()((set, get) => ({
     }
 
     const video = me.videoEnabled
-    set({ ...base, phase: 'connecting', micOn: me.audioEnabled, camOn: video, speakerOn: video, expanded: true })
+    set({ ...base, phase: 'connecting', micOn: me.audioEnabled, camOn: video, audioOutput: defaultOutput(video), expanded: true })
     try {
       await ensureMediaPermission(video)
       const session = { ...connection, call }
@@ -406,10 +424,25 @@ export const useCallStore = create<CallStore>()((set, get) => ({
     set({ cameraFacing: await callEngine.flipCamera() })
   },
 
-  toggleSpeaker: () => {
-    const next = !get().speakerOn
-    callEngine.setSpeakerphone(next)
-    set({ speakerOn: next })
+  setAudioOutput: (output) => {
+    clearOutputCheck()
+    set(output === 'headset' || output === 'bluetooth' ? { audioOutput: output, externalOutput: output } : { audioOutput: output })
+  },
+
+  selectAudioOutput: (output) => {
+    callEngine.setAudioOutput(output)
+    // 수화부·스피커는 바로 바뀌어 먼저 보여준다. 이어폰·블루투스는 그새 빠졌을 수 있어 SDK 가 확인해 줄 때까지 기다린다
+    if (output === 'earpiece' || output === 'speaker') {
+      set({ audioOutput: output })
+      return
+    }
+    clearOutputCheck()
+    outputCheckTimer = setTimeout(() => {
+      outputCheckTimer = null
+      if (get().audioOutput === output) return
+      // 기억해 둔 기기가 그 사이 꺼졌거나 연결이 끊긴 경우. 목록에서 빼서 다시 못 고르게 한다
+      set({ externalOutput: null, error: output === 'bluetooth' ? '블루투스 기기를 찾지 못했어요.' : '이어폰을 찾지 못했어요.' })
+    }, OUTPUT_CHECK_MS)
   },
 
   toggleScreen: async (token) => {
@@ -460,6 +493,7 @@ export const useCallStore = create<CallStore>()((set, get) => ({
 
   reset: async () => {
     clearPeerLeftTimer()
+    clearOutputCheck()
     await callEngine.leave()
     // notice("왜 끝났는지")는 통화가 끝난 뒤에 쓰이므로 남겨 둔다
     set({ ...initial, notice: get().notice })

@@ -111,7 +111,8 @@
           }
         }
       ],
-      "./plugins/withReleaseSigning"
+      "./plugins/withReleaseSigning",
+      "@bacons/apple-targets"
     ],
     "experiments": {
       "typedRoutes": true

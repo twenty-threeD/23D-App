@@ -1,10 +1,12 @@
 import { PermissionsAndroid, Platform } from 'react-native'
 import {
+  AudioRoute,
   ChannelProfileType,
   ClientRoleType,
   createAgoraRtcEngine,
   LocalVideoStreamState,
   RemoteVideoState,
+  showRPSystemBroadcastPickerView,
   VideoSourceType,
   type IRtcEngineEventHandler,
   type IRtcEngineEx,
@@ -19,6 +21,36 @@ import type { CallSession, ScreenShareSession } from './call'
 
 export type RemoteVideoKind = 'camera' | 'screen'
 export type CameraFacing = 'user' | 'environment'
+// 통화 소리가 나오는 곳. 유선·USB 이어폰은 사용자에게 같은 '이어폰'이라 하나로 묶는다
+export type AudioOutput = 'earpiece' | 'speaker' | 'headset' | 'bluetooth'
+
+// onAudioRoutingChanged 가 주는 번호(AudioRoute) → 앱에서 쓰는 이름. -1(기본값)은 실제 장치가 아니라 버린다
+function outputOfRoute(route: number): AudioOutput | null {
+  switch (route) {
+    case AudioRoute.RouteEarpiece:
+      return 'earpiece'
+    case AudioRoute.RouteSpeakerphone:
+    case AudioRoute.RouteLoudspeaker:
+      return 'speaker'
+    case AudioRoute.RouteHeadset:
+    case AudioRoute.RouteHeadsetnomic:
+    case AudioRoute.RouteUsb:
+      return 'headset'
+    case AudioRoute.RouteBluetoothDeviceHfp:
+    case AudioRoute.RouteBluetoothDeviceA2dp:
+      return 'bluetooth'
+    default:
+      return null
+  }
+}
+
+// 안드로이드 setRouteInCommunicationMode 에 넘기는 번호
+const ANDROID_ROUTE: Record<AudioOutput, number> = {
+  headset: AudioRoute.RouteHeadset,
+  earpiece: AudioRoute.RouteEarpiece,
+  speaker: AudioRoute.RouteSpeakerphone,
+  bluetooth: AudioRoute.RouteBluetoothDeviceHfp,
+}
 
 // 권한 거부는 사용자가 정하는 것이라 코드로 허용시킬 수 없다.
 // 대신 "서버에 통화를 만들기 전에" 먼저 물어봐서, 거부당하면 아예 걸지 않는다
@@ -54,6 +86,8 @@ interface EngineHandlers {
   // 상대 카메라 uid 가 채널에서 빠졌을 때. 종료 버튼이 아니라 앱 종료·네트워크로 빠진 경우도 여기로 온다
   onPeerLeft?: () => void
   onPeerJoined?: () => void
+  // 소리가 나오는 곳이 바뀌었을 때. 이어폰을 꽂거나 블루투스가 붙으면 SDK 가 알아서 그쪽으로 돌리므로 여기서 받아 화면에 맞춘다
+  onAudioOutput?: (output: AudioOutput) => void
   onError?: (message: string) => void
 }
 
@@ -176,6 +210,10 @@ class CallEngine {
         }
         this.levels = { me, peer: sawPeer ? peer : this.levels.peer }
       },
+      onAudioRoutingChanged: (routing) => {
+        const output = outputOfRoute(routing)
+        if (output) this.handlers.onAudioOutput?.(output)
+      },
     }
     engine.registerEventHandler(this.eventHandler)
     // 말하는 사람 표시용. 150ms 마다 음량을 받는다(웹이 직접 읽던 주기와 같다)
@@ -257,18 +295,20 @@ class CallEngine {
   }
 
   // 안드로이드는 화면 캡처 권한 창(MediaProjection)과 화면공유용 포그라운드 서비스를 SDK 가 띄운다.
-  // 캡처를 먼저 시작해 권한을 받은 뒤 채널에 붙는다 — 거부했는데 붙어 있으면 빈 공유 참가자가 남는다(웹과 같은 순서)
+  // iOS 는 앱이 직접 화면을 찍을 수 없어 방송 확장(targets/ScreenShare, ReplayKit)이 찍어 앱으로 넘겨준다.
+  // 그래서 캡처를 준비한 뒤 시스템 '화면 기록' 창을 띄우고, 사용자가 '방송 시작'을 누르면 캡처가 시작된다.
+  // 어느 쪽이든 캡처가 실제로 시작된 뒤 채널에 붙는다 — 거부했는데 붙어 있으면 빈 공유 참가자가 남는다(웹과 같은 순서)
   async startScreen(session: ScreenShareSession) {
     const engine = this.engine
     if (!engine || !this.joined) throw new Error('통화에 연결된 뒤 화면을 공유할 수 있어요.')
     if (this.screenConnection) await this.stopScreen()
 
     await new Promise<void>((resolve, reject) => {
-      // 권한 창을 오래 띄워 둘 수 있어 넉넉히 기다린다
+      // 권한·방송 창을 오래 띄워 둘 수 있어 넉넉히 기다린다. iOS 방송 창은 취소해도 알려주지 않아 이 시간이 지나야 접는다
       const timer = setTimeout(() => {
         this.pendingScreen = null
         engine.stopScreenCapture()
-        reject(new Error('화면 공유 권한을 받지 못했어요.'))
+        reject(new Error(Platform.OS === 'ios' ? '화면 공유를 시작하지 않았어요.' : '화면 공유 권한을 받지 못했어요.'))
       }, 60_000)
       this.pendingScreen = {
         resolve: () => {
@@ -289,7 +329,14 @@ class CallEngine {
         // 글자가 많은 화면(문서·사진)이 대부분이라 부드러움보다 선명도를 택한다
         videoParams: { dimensions: { width: 720, height: 1280 }, frameRate: 10, bitrate: 0 },
       })
-      if (code < 0) this.pendingScreen.reject(new Error(`화면 공유를 시작하지 못했어요. (${code})`))
+      if (code < 0) {
+        this.pendingScreen.reject(new Error(`화면 공유를 시작하지 못했어요. (${code})`))
+        return
+      }
+      // 앱 번들의 방송 확장을 미리 골라 둔 시스템 창을 띄운다. 마이크는 통화로 이미 보내고 있어 창의 마이크 버튼은 숨긴다
+      if (Platform.OS === 'ios') {
+        showRPSystemBroadcastPickerView(false).catch(() => this.pendingScreen?.reject(new Error('이 기기에서는 화면 공유를 할 수 없어요.')))
+      }
     })
 
     const connection: RtcConnection = { channelId: session.channelName, localUid: session.screenUid }
@@ -322,12 +369,15 @@ class CallEngine {
     if (connection) engine.leaveChannelEx(connection)
   }
 
-  setSpeakerphone(on: boolean) {
-    this.engine?.setEnableSpeakerphone(on)
-  }
-
-  isSpeakerphoneOn(): boolean {
-    return this.engine?.isSpeakerphoneEnabled() ?? false
+  // 소리가 나올 곳을 고른다. 실제로 바뀌었는지는 onAudioOutput 으로 다시 온다.
+  // 안드로이드는 setRouteInCommunicationMode 로 블루투스·이어폰·수화부·스피커를 직접 고른다. 아고라 문서가
+  // setEnableSpeakerphone 과 섞으면 충돌한다고 해서 안드로이드에서는 이것만 쓴다.
+  // iOS 에는 그 API 가 없어 스피커를 켜고 끄는 것만 된다. 끄면 시스템이 연결된 이어폰·블루투스, 없으면 수화부로 돌려준다
+  setAudioOutput(output: AudioOutput) {
+    const engine = this.engine
+    if (!engine) return
+    if (Platform.OS === 'android') engine.setRouteInCommunicationMode(ANDROID_ROUTE[output])
+    else engine.setEnableSpeakerphone(output === 'speaker')
   }
 
   // 채널에서 나오고 카메라를 놓는다. 엔진은 다음 통화에 다시 쓰려고 살려 둔다
