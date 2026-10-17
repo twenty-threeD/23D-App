@@ -55,6 +55,7 @@ export default function CallProvider() {
         const t = tokenRef.current
         if (t && useCallStore.getState().screenOn) void useCallStore.getState().toggleScreen(t)
       },
+      onAudioOutput: (output) => useCallStore.getState().setAudioOutput(output),
       onError: (message) => useCallStore.getState().setError(message),
     })
   }, [])

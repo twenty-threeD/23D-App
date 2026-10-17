@@ -1,9 +1,9 @@
 import { useState } from 'react'
-import { Modal, Pressable, ScrollView, StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native'
-import { useSafeAreaInsets } from 'react-native-safe-area-context'
+import { Pressable, StyleSheet, type StyleProp, type ViewStyle } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
 import { colors, radius } from '@/constants/theme'
 import Text from './Text'
+import OptionSheet from './OptionSheet'
 
 export interface SelectOption<T extends string | number> {
   label: string
@@ -36,7 +36,6 @@ export default function Select<T extends string | number>({
   align = 'left',
   style,
 }: SelectProps<T>) {
-  const insets = useSafeAreaInsets()
   const [open, setOpen] = useState(false)
   const selected = options.find((o) => o.value === value)
   const isMain = tone === 'main'
@@ -62,38 +61,7 @@ export default function Select<T extends string | number>({
         <Ionicons name="chevron-down" size={16} color={isMain ? colors.main : colors.inkSub} />
       </Pressable>
 
-      <Modal visible={open} transparent animationType="fade" statusBarTranslucent navigationBarTranslucent onRequestClose={() => setOpen(false)}>
-        <View style={styles.backdrop}>
-          <Pressable style={StyleSheet.absoluteFill} onPress={() => setOpen(false)} accessible={false} />
-          <View style={[styles.sheet, { paddingBottom: insets.bottom + 12 }]}>
-            {title ? (
-              <Text size="base" weight="bold" style={styles.sheetTitle}>
-                {title}
-              </Text>
-            ) : null}
-            <ScrollView style={styles.list}>
-              {options.map((option) => {
-                const active = option.value === value
-                return (
-                  <Pressable
-                    key={String(option.value)}
-                    onPress={() => {
-                      setOpen(false)
-                      onChange(option.value)
-                    }}
-                    style={({ pressed }) => [styles.option, pressed && styles.optionPressed]}
-                  >
-                    <Text size="base" weight={active ? 'semibold' : 'regular'} color={active ? colors.main : colors.ink} style={styles.label}>
-                      {option.label}
-                    </Text>
-                    {active ? <Ionicons name="checkmark" size={18} color={colors.main} /> : null}
-                  </Pressable>
-                )
-              })}
-            </ScrollView>
-          </View>
-        </View>
-      </Modal>
+      <OptionSheet visible={open} options={options} value={value} onSelect={onChange} onClose={() => setOpen(false)} title={title} />
     </>
   )
 }
@@ -123,34 +91,5 @@ const styles = StyleSheet.create({
   },
   centerLabel: {
     textAlign: 'center',
-  },
-  backdrop: {
-    flex: 1,
-    justifyContent: 'flex-end',
-    backgroundColor: colors.backdrop,
-  },
-  sheet: {
-    maxHeight: '70%',
-    backgroundColor: colors.white,
-    borderTopLeftRadius: radius['2xl'],
-    borderTopRightRadius: radius['2xl'],
-    paddingTop: 16,
-  },
-  sheetTitle: {
-    paddingHorizontal: 20,
-    paddingBottom: 8,
-  },
-  list: {
-    flexGrow: 0,
-  },
-  option: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    paddingHorizontal: 20,
-    paddingVertical: 14,
-  },
-  optionPressed: {
-    backgroundColor: colors.zinc50,
   },
 })
