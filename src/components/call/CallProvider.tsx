@@ -50,6 +50,11 @@ export default function CallProvider() {
       // 상대가 앱을 끄거나 네트워크가 끊기면 종료 신호 없이 채널에서만 사라진다. 곧 돌아올 수 있어 기다린다
       onPeerLeft: () => useCallStore.getState().handlePeerLeft(() => tokenRef.current),
       onPeerJoined: () => useCallStore.getState().handlePeerJoined(),
+      // 시스템 알림의 '중지'로 공유가 끝나도 우리 버튼을 누른 것처럼 정리해야 서버 점유까지 풀린다
+      onScreenEnded: () => {
+        const t = tokenRef.current
+        if (t && useCallStore.getState().screenOn) void useCallStore.getState().toggleScreen(t)
+      },
       onError: (message) => useCallStore.getState().setError(message),
     })
   }, [])

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Animated, BackHandler, Easing, Pressable, StyleSheet, View } from 'react-native'
+import { Animated, BackHandler, Easing, Platform, Pressable, StyleSheet, View } from 'react-native'
 import { Image } from 'expo-image'
 import { StatusBar } from 'expo-status-bar'
 import { MaterialIcons } from '@expo/vector-icons'
@@ -54,7 +54,7 @@ export default function CallOverlay() {
   const insets = useSafeAreaInsets()
   const token = useAuthStore((s) => s.accessToken)
   const state = useCallStore()
-  const { phase, call, myUsername, peerNameHint, peerImageUrl, micOn, camOn, speakerOn, busy, remoteCamUid, remoteScreenUid, activeSince, peerReconnecting, expanded } =
+  const { phase, call, myUsername, peerNameHint, peerImageUrl, micOn, camOn, speakerOn, screenOn, busy, remoteCamUid, remoteScreenUid, activeSince, peerReconnecting, expanded } =
     state
   const elapsed = useCallElapsed(phase === 'active' ? activeSince : null)
   const speaking = useSpeaking(phase === 'active')
@@ -121,6 +121,21 @@ export default function CallOverlay() {
             <MaterialIcons name="mic-off" size={14} color="rgba(255,255,255,0.7)" />
             <Text size="xs" color="rgba(255,255,255,0.7)">
               음소거됨
+            </Text>
+          </View>
+        ) : null}
+        {screenOn ? (
+          <View style={[styles.chip, styles.chipOn]}>
+            <MaterialIcons name="screen-share" size={14} color={colors.white} />
+            <Text size="xs" color={colors.white}>
+              내 화면 공유 중
+            </Text>
+          </View>
+        ) : peer?.screenSharing ? (
+          <View style={[styles.chip, styles.chipOn]}>
+            <MaterialIcons name="screen-share" size={14} color={colors.white} />
+            <Text size="xs" color={colors.white}>
+              화면 공유 중
             </Text>
           </View>
         ) : null}
@@ -215,6 +230,17 @@ export default function CallOverlay() {
             {/* 음성으로 걸었어도 그냥 켜진다. 토큰에 영상 권한이 이미 들어 있다 */}
             <CallButton icon={camOn ? 'videocam' : 'videocam-off'} label="카메라" tone={camOn ? 'normal' : 'off'} disabled={!call || busy} onPress={act(state.toggleCam)} />
             {camOn ? <CallButton icon="cameraswitch" label="전환" disabled={busy} onPress={() => void state.flipCamera()} /> : null}
+            {/* 안드로이드는 SDK 가 화면 캡처 권한·서비스를 맡아 바로 공유할 수 있다. iOS 는 방송 확장(ReplayKit)이 있어야 해서 아직 숨긴다.
+                내 화면은 그리지 않는다 — 공유 중인 화면 안에 다시 그 화면이 비쳐 끝없이 겹친다 */}
+            {Platform.OS === 'android' ? (
+              <CallButton
+                icon={screenOn ? 'stop-screen-share' : 'screen-share'}
+                label="화면 공유"
+                tone={screenOn ? 'on' : 'normal'}
+                disabled={!call || busy || phase !== 'active' || (!!peer?.screenSharing && !screenOn)}
+                onPress={act(state.toggleScreen)}
+              />
+            ) : null}
             {/* 웹 브라우저와 달리 휴대폰은 수화부·스피커를 고를 수 있다 */}
             <CallButton icon={speakerOn ? 'volume-up' : 'phone-in-talk'} label={speakerOn ? '스피커' : '수화부'} tone={speakerOn ? 'on' : 'normal'} onPress={state.toggleSpeaker} />
             <CallButton icon="call-end" label="종료" tone="danger" onPress={act(state.hangUp)} />
@@ -233,6 +259,7 @@ const styles = StyleSheet.create({
   dim: { backgroundColor: 'rgba(13,12,17,0.7)' },
   topBar: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 20 },
   chip: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 999, backgroundColor: 'rgba(0,0,0,0.4)' },
+  chipOn: { backgroundColor: 'rgba(254,106,76,0.9)' },
   minimize: { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center' },
   stage: { flex: 1, padding: 16, alignItems: 'center', justifyContent: 'center' },
   mainVideo: { width: '100%', height: '100%', borderRadius: 24, overflow: 'hidden', backgroundColor: 'rgba(0,0,0,0.5)' },
@@ -247,5 +274,6 @@ const styles = StyleSheet.create({
   avatar: { width: 128, height: 128, borderRadius: 64, borderWidth: 4, borderColor: 'rgba(255,255,255,0.15)' },
   avatarSpeaking: { borderColor: colors.main },
   profileTexts: { gap: 8 },
-  controls: { flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'center', gap: 16, paddingHorizontal: 16 },
+  // 영상·화면공유 버튼까지 여섯 개가 되면 좁은 휴대폰에서 넘쳐서 두 줄로 내린다
+  controls: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'flex-end', justifyContent: 'center', columnGap: 14, rowGap: 16, paddingHorizontal: 16 },
 })
