@@ -3,7 +3,7 @@ import { ActivityIndicator, Modal, StyleSheet, View } from 'react-native'
 import { WebView } from 'react-native-webview'
 import type { ShouldStartLoadRequest, WebViewMessageEvent } from 'react-native-webview/lib/WebViewTypes'
 import BackHeader from '@/components/BackHeader'
-import { toast } from '@/components/ui/Toast'
+import { toast, ToastHost } from '@/components/ui/Toast'
 import { colors } from '@/constants/theme'
 import { WEB_URL } from '@/lib/config'
 import { openAppUrl } from '@/lib/appLink'
@@ -160,6 +160,8 @@ export default function TossCheckoutModal({ request, onSuccess, onFail, onClose 
           style={styles.webview}
         />
       </View>
+      {/* 모달은 별도 창이라 루트의 토스트가 가려진다. 여기서 일어난 오류·안내는 모달 위에 띄운다 */}
+      <ToastHost />
     </Modal>
   )
 }

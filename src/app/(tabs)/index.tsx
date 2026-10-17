@@ -97,7 +97,9 @@ export default function Page() {
             value={searchValue}
             onChangeText={setSearchValue}
             onSubmit={handleSearch}
-            placeholder="자동차 래핑, 에어컨 설치, 이사 인테리어... 어떤걸 찾고 있나요?"
+            // 웹 문구(자동차 래핑, 에어컨 설치, 이사 인테리어... 어떤걸 찾고 있나요?)는 휴대폰 너비에 안 들어가
+            // 안드로이드에서 안내 문구가 두 줄로 꺾이며 아래가 잘린다. 한 줄에 들어가는 짧은 문구로 바꿨다
+            placeholder="에어컨 설치, 이사 청소... 무엇을 찾나요?"
           />
           {/* 칩 너비가 글자 수마다 달라 들쭉날쭉하게 끊기지 않도록 8개를 같은 너비 4칸 × 2줄로 맞춘다(웹 모바일) */}
           <View style={styles.chips}>

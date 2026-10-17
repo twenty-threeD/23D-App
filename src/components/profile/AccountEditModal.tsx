@@ -4,7 +4,7 @@ import Modal, { ModalActions } from '@/components/ui/Modal'
 import Button from '@/components/ui/Button'
 import Text from '@/components/ui/Text'
 import TextField, { Field, PasswordField } from '@/components/ui/TextField'
-import { toast } from '@/components/ui/Toast'
+import { toast, ToastHost } from '@/components/ui/Toast'
 import { colors } from '@/constants/theme'
 import { checkPhoneVerifyCode, sendEmailChangeCode, sendPhoneVerifyCode, verifyPassword } from '@/lib/auth'
 import { changeEmail, changePhone } from '@/lib/member'
@@ -145,6 +145,8 @@ export default function AccountEditModal({ field, token, verifyOnlyPhone, onClos
           </ModalActions>
         </>
       )}
+      {/* 모달은 별도 창이라 루트의 토스트가 가려진다. 여기서 일어난 오류·안내는 모달 위에 띄운다 */}
+      <ToastHost />
     </Modal>
   )
 }

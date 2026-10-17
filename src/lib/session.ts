@@ -20,9 +20,10 @@ export async function ensureAccessToken(): Promise<string | null> {
         return token
       })
       .catch((e) => {
-        // 리프레시 토큰도 만료/폐기된 상태이므로 재로그인이 필요하다.
-        // 네트워크가 잠깐 끊긴 것(서버 응답 없음)이면 세션은 그대로 두고 다음 기회에 다시 시도한다
-        if (e instanceof ApiError) clear()
+        // 서버가 토큰을 거절(4xx)했으면 리프레시 토큰도 만료·폐기된 것이라 재로그인이 필요하다.
+        // 서버는 계정당 리프레시 토큰을 하나만 두어서, 다른 기기·웹에서 로그인해도 여기로 온다.
+        // 네트워크 끊김이나 서버 오류(5xx)는 토큰 문제가 아니라 세션을 두고 다음 기회에 다시 시도한다
+        if (e instanceof ApiError && e.status >= 400 && e.status < 500) clear()
         return null
       })
       .finally(() => {
