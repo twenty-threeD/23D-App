@@ -3,7 +3,7 @@ import Modal, { ModalActions } from '@/components/ui/Modal'
 import Button from '@/components/ui/Button'
 import Text from '@/components/ui/Text'
 import { Field, PasswordField } from '@/components/ui/TextField'
-import { toast } from '@/components/ui/Toast'
+import { toast, ToastHost } from '@/components/ui/Toast'
 import { colors } from '@/constants/theme'
 import { PASSWORD_REGEX } from '@/components/login/signupSteps'
 import { changePassword, setPassword } from '@/lib/member'
@@ -91,6 +91,8 @@ export default function PasswordModal({ mode, token, onClose, onDone }: Password
           {saving ? '처리 중...' : isChange ? '변경' : '설정'}
         </Button>
       </ModalActions>
+      {/* 모달은 별도 창이라 루트의 토스트가 가려진다. 여기서 일어난 오류·안내는 모달 위에 띄운다 */}
+      <ToastHost />
     </Modal>
   )
 }

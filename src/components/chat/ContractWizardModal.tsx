@@ -6,7 +6,7 @@ import Text from '@/components/ui/Text'
 import Button from '@/components/ui/Button'
 import TextField, { Field } from '@/components/ui/TextField'
 import DateField from '@/components/ui/DateField'
-import { toast } from '@/components/ui/Toast'
+import { toast, ToastHost } from '@/components/ui/Toast'
 import BackHeader from '@/components/BackHeader'
 import SignaturePad from '@/components/chat/SignaturePad'
 import { colors, PAGE_X, radius } from '@/constants/theme'
@@ -342,6 +342,8 @@ export default function ContractWizardModal({
           </ScrollView>
         </KeyboardAvoidingView>
       </View>
+      {/* 모달은 별도 창이라 루트의 토스트가 가려진다. 여기서 일어난 오류·안내는 모달 위에 띄운다 */}
+      <ToastHost />
     </Modal>
   )
 }

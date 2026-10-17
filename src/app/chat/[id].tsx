@@ -142,6 +142,7 @@ export default function Page() {
   const [connected, setConnected] = useState(false)
 
   const stompClientRef = useRef<Client | null>(null)
+  const listRef = useRef<FlatList<Message>>(null)
   // 소켓 재연결 콜백은 연결 시점의 클로저라 최신 목록을 ref 로 읽는다
   const messagesRef = useRef<Message[]>([])
   useEffect(() => {
@@ -452,6 +453,8 @@ export default function Page() {
     setMessage('')
     setPendingImages([])
     setPendingDoc(null)
+    // 위쪽 지난 대화를 보다가 보내도 내 메시지가 보이도록 맨 아래(뒤집힌 목록의 0)로 내린다
+    listRef.current?.scrollToOffset({ offset: 0, animated: true })
   }
 
   // 계약서 진행 순서: 을(글 올린 사람, 파는 쪽)이 [계약서 제안](propose) → 갑(문의한 사람, 사는 쪽)이
@@ -573,28 +576,38 @@ export default function Page() {
     })
   }
 
-  // 제안 카드는 자기 메시지만 보고 그리므로, 마지막 체결 시점을 미리 구해 그보다 앞선 제안은 끝난 것으로 표시한다.
-  // 같은 이유로 체결 카드도 결제 완료를 모르므로, 마지막 결제보다 앞선 체결은 결제된 것으로 본다.
-  // 서버 PAYMENT 메시지와 [결제 완료] 메시지가 같은 주문이면 카드가 두 번 보이므로 서버 메시지 쪽만 그린다
-  const { lastCompletedIdx, lastPaymentIdx, serverPaidOrderIds } = useMemo(() => {
-    let completedIdx = -1
-    let paymentIdx = -1
-    const paidIds = new Set<string>()
-    messages.forEach((m, i) => {
-      if (m.message?.startsWith('[계약서 체결 완료]')) completedIdx = i
-      if ((m.type === 'PAYMENT' && m.payment) || m.message?.startsWith('[결제 완료]')) paymentIdx = i
-      if (m.type === 'PAYMENT' && m.payment?.orderId) paidIds.add(m.payment.orderId)
+  // 서버 PAYMENT 메시지와 [결제 완료] 메시지가 같은 주문이면 카드가 두 번 보이므로 서버 메시지 쪽만 그린다.
+  // 그리지 않을 메시지는 목록에서 아예 뺀다. 남겨 두면 아바타·시간만 있는 빈 줄이 생기고,
+  // 같은 사람이 같은 분에 보낸 메시지로 묶여 결제 카드 쪽 시간이 빈 줄로 넘어간다
+  const visibleMessages = useMemo(() => {
+    const paidIds = new Set(messages.flatMap((m) => (m.type === 'PAYMENT' && m.payment?.orderId ? [m.payment.orderId] : [])))
+    if (paidIds.size === 0) return messages
+    return messages.filter((m) => {
+      if (m.type === 'PAYMENT' || m.attachedFileUrls?.length) return true
+      const prefixed = parsePaymentMessage(m.message)
+      return !prefixed || !paidIds.has(prefixed.orderId)
     })
-    return { lastCompletedIdx: completedIdx, lastPaymentIdx: paymentIdx, serverPaidOrderIds: paidIds }
   }, [messages])
 
+  // 제안 카드는 자기 메시지만 보고 그리므로, 마지막 체결 시점을 미리 구해 그보다 앞선 제안은 끝난 것으로 표시한다.
+  // 같은 이유로 체결 카드도 결제 완료를 모르므로, 마지막 결제보다 앞선 체결은 결제된 것으로 본다.
+  const { lastCompletedIdx, lastPaymentIdx } = useMemo(() => {
+    let completedIdx = -1
+    let paymentIdx = -1
+    visibleMessages.forEach((m, i) => {
+      if (m.message?.startsWith('[계약서 체결 완료]')) completedIdx = i
+      if ((m.type === 'PAYMENT' && m.payment) || m.message?.startsWith('[결제 완료]')) paymentIdx = i
+    })
+    return { lastCompletedIdx: completedIdx, lastPaymentIdx: paymentIdx }
+  }, [visibleMessages])
+
   // 최신 메시지가 아래에 붙도록 뒤집힌 목록을 쓴다. 위로 끝까지 올리면 이전 메시지를 이어 받는다
-  const reversed = useMemo(() => [...messages].reverse(), [messages])
+  const reversed = useMemo(() => [...visibleMessages].reverse(), [visibleMessages])
 
   function renderMessage(msg: Message, idx: number) {
     if (!selectedRoom) return null
-    const prevMsg = messages[idx - 1]
-    const nextMsg = messages[idx + 1]
+    const prevMsg = visibleMessages[idx - 1]
+    const nextMsg = visibleMessages[idx + 1]
     const showDateDivider = !prevMsg || dateKey(msg.createdAt) !== dateKey(prevMsg.createdAt)
     const showTime =
       !nextMsg ||
@@ -632,9 +645,8 @@ export default function Page() {
 
     // 백엔드가 만드는 결제 완료 메시지. PAYMENT 타입이면 그걸 쓰고, 아니면 접두사 메시지를 읽는다
     const prefixedPayment = msg.type === 'PAYMENT' ? null : parsePaymentMessage(msg.message)
-    const paymentInfo =
-      (msg.type === 'PAYMENT' ? msg.payment : null) ??
-      (prefixedPayment && !serverPaidOrderIds.has(prefixedPayment.orderId) ? prefixedPayment : null)
+    // 서버 결제 메시지와 겹치는 접두사 메시지는 visibleMessages 에서 이미 빠졌다
+    const paymentInfo = (msg.type === 'PAYMENT' ? msg.payment : null) ?? prefixedPayment
     const paymentCard = paymentInfo ? <PaymentCard payment={paymentInfo} isSent={isSent} paidAt={msg.createdAt} /> : null
     // 블록체인 트랜잭션 해시. 백엔드가 blockchainTxHash → txHash 로 이름을 옮기는 중이라 둘 다 본다
     const txHash = paymentInfo ? paymentInfo.txHash ?? paymentInfo.blockchainTxHash : null
@@ -814,14 +826,17 @@ export default function Page() {
       <KeyboardAvoidingView style={styles.flex} behavior="padding">
         <View style={styles.flex}>
           <FlatList
+            ref={listRef}
             data={reversed}
             inverted
             keyExtractor={(msg, index) => (msg.messageId != null ? String(msg.messageId) : `${msg.createdAt}-${index}`)}
-            renderItem={({ index }) => renderMessage(messages[messages.length - 1 - index], messages.length - 1 - index)}
+            renderItem={({ index }) => renderMessage(visibleMessages[visibleMessages.length - 1 - index], visibleMessages.length - 1 - index)}
             contentContainerStyle={styles.messages}
             onEndReached={() => void loadOlder()}
             onEndReachedThreshold={0.3}
-            maintainVisibleContentPosition={{ minIndexForVisible: 0 }}
+            // 위치 유지만 두면 새 메시지가 맨 아래에 붙을 때 화면이 그대로 남아 새 메시지가 아래로 가려진다.
+            // 맨 아래 근처에 있을 때는 새 메시지 쪽으로 따라 내려가고, 지난 대화를 보는 중이면 위치를 지킨다
+            maintainVisibleContentPosition={{ minIndexForVisible: 0, autoscrollToTopThreshold: 120 }}
             // 뒤집힌 목록이라 머리 칸이 화면 맨 아래(최신 메시지 아래)다. 진행 중인 통화 카드를 대화 끝에 붙인다
             ListHeaderComponent={
               callPhase !== 'idle' && activeCall && selectedRoom && activeCall.roomId === selectedRoom.roomId ? (
