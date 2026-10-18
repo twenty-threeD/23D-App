@@ -36,6 +36,7 @@ import {
 } from '@/lib/profile'
 import { deleteAccount } from '@/lib/member'
 import { logout } from '@/lib/auth'
+import { unregisterPushToken } from '@/lib/push'
 import { deletePost, getFavoritePosts, getMyPosts, type Post } from '@/lib/post'
 import { pickImages } from '@/lib/pickers'
 import { confirm } from '@/lib/dialog'
@@ -319,6 +320,8 @@ export default function Page() {
   async function handleLogout() {
     if (!(await confirm('로그아웃할까요?', { confirmText: '로그아웃' }))) return
     try {
+      // 서버 세션을 끊기 전에 이 기기 푸시 토큰부터 뺀다. 끊고 나면 인증이 없어 뺄 수 없다
+      if (token) await unregisterPushToken(token)
       await logout(token)
     } catch {
       // 서버 로그아웃이 실패해도 기기에서는 로그아웃한다

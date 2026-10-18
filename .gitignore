@@ -48,3 +48,6 @@ yarn-error.*
 *.keystore
 keystore.properties
 credentials.json
+
+# Firebase 안드로이드 설정(푸시). 저장소가 공개라 API 키가 스캔에 걸리지 않게 ~/itda-keys 에서 복사해 쓴다
+google-services.json

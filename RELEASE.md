@@ -9,6 +9,7 @@
 - 프로젝트 루트의 `.env` — `.env.example` 참고. **`EXPO_PUBLIC_TOSS_CLIENT_KEY` 는 운영 키(`live_ck_…`)** 를 넣는다
   (`EXPO_PUBLIC_*` 값은 빌드할 때 앱에 그대로 들어간다. 토스 클라이언트 키처럼 공개용 값만 넣는다)
 - 서명 키스토어(아래)
+- 프로젝트 루트의 `google-services.json` — 안드로이드 푸시(FCM)용 Firebase 설정. 저장소가 공개라 커밋하지 않는다(아래 '푸시 알림')
 
 ## 2. 서명 키
 
@@ -71,7 +72,19 @@ $ANDROID_HOME/build-tools/<버전>/apksigner verify --print-certs android/app/bu
 ## 6. 알아둘 것
 
 - 통화 중 앱을 벗어나면 안드로이드가 마이크를 막을 수 있다(포그라운드 서비스 미적용).
-- 앱이 꺼져 있을 때의 전화·알림 푸시는 아직 없다(서버 푸시 연동 필요).
+- iOS 푸시는 유료 Apple Developer 계정(APNs)이 있어야 해서 아직 안 된다. 안드로이드만 동작한다.
+
+## 푸시 알림
+
+서버가 Expo 푸시(`ExponentPushToken[…]`)로 채팅·전화 알림을 보내고, Expo 가 안드로이드에서는 FCM 으로 넘긴다.
+
+- Expo 프로젝트: `@16bit_16/itda`(`app.json` 의 `extra.eas.projectId`). 이게 있어야 푸시 토큰이 나온다
+- Firebase 프로젝트: `itda-5c387`(안드로이드 앱 `store.idta.app` 등록)
+- `google-services.json`: Firebase 콘솔 → 프로젝트 설정 → 내 앱에서 받는다. 프로젝트 루트에 두면 prebuild 가 넣는다.
+  없으면 토큰 발급이 실패해 푸시가 오지 않는다(빌드 스크립트가 막는다)
+- FCM V1 서비스 계정 키: 서버(Expo)가 FCM 으로 보낼 때 쓰는 비밀키. `eas credentials -p android` →
+  Google Service Account → Push Notifications (FCM V1) 로 Expo 에 올려 두었다. 키를 새로 만들면 다시 올린다
+- 키·설정 파일 원본은 `~/itda-keys` 에 서명 키와 함께 둔다
 - 소셜 로그인은 카카오·네이버만 지원한다(구글은 웹뷰 로그인을 막는다).
 
 ## iOS (준비 상태)

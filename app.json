@@ -22,6 +22,7 @@
     "android": {
       "package": "store.idta.app",
       "versionCode": 2,
+      "googleServicesFile": "./google-services.json",
       "adaptiveIcon": {
         "backgroundColor": "#ffffff",
         "foregroundImage": "./assets/android-icon-foreground.png",
@@ -112,10 +113,24 @@
         }
       ],
       "./plugins/withReleaseSigning",
-      "@bacons/apple-targets"
+      "@bacons/apple-targets",
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/notification-icon.png",
+          "color": "#FE6A4C",
+          "defaultChannel": "default"
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true
+    },
+    "owner": "16bit_16",
+    "extra": {
+      "eas": {
+        "projectId": "efaa424c-aed6-4a95-b310-6448ec76e984"
+      }
     }
   }
 }
