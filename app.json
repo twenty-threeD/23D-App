@@ -21,9 +21,9 @@
     },
     "android": {
       "package": "store.idta.app",
-      "versionCode": 1,
+      "versionCode": 2,
       "adaptiveIcon": {
-        "backgroundColor": "#FE6A4C",
+        "backgroundColor": "#ffffff",
         "foregroundImage": "./assets/android-icon-foreground.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
