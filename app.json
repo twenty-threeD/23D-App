@@ -22,6 +22,7 @@
     "android": {
       "package": "store.idta.app",
       "versionCode": 2,
+      "googleServicesFile": "./google-services.json",
       "adaptiveIcon": {
         "backgroundColor": "#ffffff",
         "foregroundImage": "./assets/android-icon-foreground.png",
