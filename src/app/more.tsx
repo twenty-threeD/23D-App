@@ -6,6 +6,7 @@ import Button from '@/components/ui/Button'
 import BackHeader from '@/components/BackHeader'
 import TopButton from '@/components/TopButton'
 import ServiceCard, { ServiceCardSkeleton } from '@/components/main/ServiceCard'
+import type { MoreSection } from '@/components/main/ServiceSection'
 import { colors, PAGE_X } from '@/constants/theme'
 import { getPostCategories, searchPostsPaged, type Post, type PostCategory } from '@/lib/post'
 import { formatNumber } from '@/lib/http'
@@ -15,11 +16,19 @@ const SORT_OPTIONS = [
   { label: '최신순', value: 'updatedAt,desc' },
 ] as const
 
+// 메인에서 더보기를 누른 줄의 제목을 그대로 보여준다. 목록은 줄과 상관없이 같은 서비스 목록이다
+const SECTIONS: Record<MoreSection, { title: string; description: string }> = {
+  ad: { title: '광고', description: '잇다가 소개하는 능력자들을 모아봤어요.' },
+  popular: { title: '이웃들이\n많이 찾아요', description: '지금 이웃들이 관심 있게 보고 있는 능력자들을 모아봤어요.' },
+  revisit: { title: '재방문율이\n높아요', description: '이웃들이 다시 찾는 능력자들을 모아봤어요.' },
+}
+
 const PAGE_SIZE = 20
 const COLUMN_GAP = 12
 
 export default function Page() {
-  const params = useLocalSearchParams<{ categoryId?: string; sort?: string }>()
+  const params = useLocalSearchParams<{ categoryId?: string; sort?: string; section?: string }>()
+  const section = SECTIONS[params.section as MoreSection] ?? SECTIONS.popular
   const categoryId = params.categoryId || null
   const sort = params.sort || SORT_OPTIONS[0].value
   const { width } = useWindowDimensions()
@@ -90,9 +99,9 @@ export default function Page() {
     <View style={styles.header}>
       <View style={styles.titleBlock}>
         <Text size="3xl" weight="bold">
-          {'이웃들이\n많이 찾아요'}
+          {section.title}
         </Text>
-        <Text color={colors.zinc500}>지금 이웃들이 관심 있게 보고 있는 능력자들을 모아봤어요.</Text>
+        <Text color={colors.zinc500}>{section.description}</Text>
       </View>
       <View style={styles.divider} />
       <View style={styles.chips}>
