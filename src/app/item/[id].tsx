@@ -18,7 +18,7 @@ import InquiryButton from '@/components/item/InquiryButton'
 import ServiceSection from '@/components/main/ServiceSection'
 import { toast } from '@/components/ui/Toast'
 import { colors, PAGE_X, radius } from '@/constants/theme'
-import { favoritePost, getFavoritePosts, getPost, getPosts, unfavoritePost, type Post } from '@/lib/post'
+import { favoritePost, getFavoritePosts, getPost, getRankedPosts, POPULAR_SORT, REVISIT_SORT, unfavoritePost, type Post } from '@/lib/post'
 import { parsePostContent } from '@/lib/priceCard'
 import { createReview, getReviewableContracts, getReviews, type Review as ReviewData, type ReviewableContract } from '@/lib/review'
 import { ApiError } from '@/lib/apiError'
@@ -41,7 +41,8 @@ export default function Page() {
 
   // 어떤 글을 받은 결과인지 같이 들고 있어, 다른 글로 옮겨 오면 자동으로 불러오는 중이 된다
   const [loaded, setLoaded] = useState<{ postId: number; post: Post | null } | null>(null)
-  const [relatedPosts, setRelatedPosts] = useState<Post[]>([])
+  const [popularPosts, setPopularPosts] = useState<Post[]>([])
+  const [revisitPosts, setRevisitPosts] = useState<Post[]>([])
   const [isExpanded, setIsExpanded] = useState(false)
   const [canExpand, setCanExpand] = useState(false)
   const [isFavorited, setIsFavorited] = useState(false)
@@ -76,10 +77,13 @@ export default function Page() {
   }, [postId, token])
 
   useEffect(() => {
-    getPosts(token)
-      .then(setRelatedPosts)
+    getRankedPosts(POPULAR_SORT)
+      .then(setPopularPosts)
       .catch(() => {})
-  }, [token])
+    getRankedPosts(REVISIT_SORT)
+      .then(setRevisitPosts)
+      .catch(() => {})
+  }, [])
 
   useEffect(() => {
     if (!token || !postId) return
@@ -195,9 +199,6 @@ export default function Page() {
   const average = reviewCount > 0 ? reviews.reduce((total, item) => total + item.rating, 0) / reviewCount : 0
   const headerImage = post.fileUrls?.[0] ?? null
   const contentImages = post.fileUrls && post.fileUrls.length > 1 ? post.fileUrls.slice(1) : post.fileUrls ?? []
-  // 메인과 같은 규칙으로 줄을 채운다. 추천 API 가 없어 전체 글에서 잘라 쓴다
-  const revisitPosts = [...relatedPosts.slice(4), ...relatedPosts.slice(0, 4)].slice(0, 10)
-  const popularPosts = relatedPosts.slice(0, 10)
 
   return (
     <View style={styles.container}>
@@ -361,8 +362,8 @@ export default function Page() {
         </View>
 
         <View style={styles.related}>
-          <ServiceSection title="재방문율이 높아요" loading={false} posts={revisitPosts} />
-          <ServiceSection title="이웃들이 많이 찾아요" loading={false} posts={popularPosts} />
+          <ServiceSection title="재방문율이 높아요" section="revisit" loading={false} posts={revisitPosts} />
+          <ServiceSection title="이웃들이 많이 찾아요" section="popular" loading={false} posts={popularPosts} />
         </View>
       </ScrollView>
 

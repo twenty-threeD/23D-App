@@ -8,9 +8,13 @@ import type { Post } from '@/lib/post'
 
 // 메인과 서비스 상세 하단이 같은 카드 줄 시안을 써서 한 곳으로 모았다
 
-export function MoreLink() {
+// 웹은 모든 더보기가 '이웃들이 많이 찾아요' 목록으로 가서, 광고에서 눌러도 다른 제목이 떴다.
+// 어느 줄에서 눌렀는지 넘겨 더보기 화면 제목을 그 줄과 맞춘다
+export type MoreSection = 'ad' | 'popular' | 'revisit'
+
+export function MoreLink({ section }: { section: MoreSection }) {
   return (
-    <Pressable onPress={() => router.push('/more')} hitSlop={8}>
+    <Pressable onPress={() => router.push({ pathname: '/more', params: { section } })} hitSlop={8}>
       <Text size="sm" weight="medium" color={colors.inkMuted} style={styles.underline}>
         더보기
       </Text>
@@ -27,21 +31,31 @@ export function Empty() {
 }
 
 // 휴대폰 시안은 카드 위에 한 줄 제목과 더보기를 나란히 둔다
-export function SectionTitle({ title }: { title: string }) {
+export function SectionTitle({ title, section }: { title: string; section: MoreSection }) {
   return (
     <View style={styles.titleRow}>
       <Text size="2xl" weight="bold" color={colors.ink}>
         {title}
       </Text>
-      <MoreLink />
+      <MoreLink section={section} />
     </View>
   )
 }
 
-export default function ServiceSection({ title, loading, posts }: { title: string; loading: boolean; posts: Post[] }) {
+export default function ServiceSection({
+  title,
+  section,
+  loading,
+  posts,
+}: {
+  title: string
+  section: MoreSection
+  loading: boolean
+  posts: Post[]
+}) {
   return (
     <View style={styles.section}>
-      <SectionTitle title={title} />
+      <SectionTitle title={title} section={section} />
       {loading ? (
         <CardRow itemWidth={260} gap={36}>
           {Array.from({ length: 3 }).map((_, i) => (
