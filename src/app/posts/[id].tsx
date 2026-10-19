@@ -20,8 +20,8 @@ import {
   deleteComment,
   deletePost,
   fetchAllPages,
-  filterByRegion,
   getComments,
+  filterByRegion,
   getPost,
   getPostsByCategory,
   isCommunityCategory,
@@ -76,6 +76,25 @@ interface CommentData {
   imageUrl?: string | null
 }
 
+interface CommentResponse extends Omit<CommentData, 'edited'> {
+  isEdited?: boolean
+  isDeleted?: boolean
+  replies?: CommentResponse[]
+}
+
+// 서버가 댓글을 페이지({ content, last })로 준다. 배열로 다루면 로그인 상태에서 글을 열 때 .map 이 없어 앱이 죽는다
+// 답글은 부모 댓글의 replies 로 들어온다. 앱에는 답글 UI 가 없어 부모 바로 뒤에 이어 보여준다(댓글 수와 맞추기 위해)
+async function fetchAllComments(postId: number, token: string | null): Promise<CommentData[]> {
+  const roots = await fetchAllPages<CommentResponse>((page, size) => getComments(postId, token, page, size))
+  const flat: CommentData[] = []
+  const visit = (c: CommentResponse) => {
+    if (!c.isDeleted) flat.push({ ...c, edited: c.isEdited })
+    c.replies?.forEach(visit)
+  }
+  roots.forEach(visit)
+  return flat
+}
+
 export default function Page() {
   const { id } = useLocalSearchParams<{ id: string }>()
   const postId = Number(id)
@@ -99,8 +118,7 @@ export default function Page() {
   const fetchComments = useCallback(async () => {
     if (!postId) return
     try {
-      const res = await getComments(postId, token)
-      setComments(res.data ?? [])
+      setComments(await fetchAllComments(postId, token))
     } catch {
       setComments([])
     }
@@ -122,9 +140,9 @@ export default function Page() {
         if (e instanceof ApiError && e.status === 404) router.replace('/community')
         else setLoaded({ postId, post: null })
       })
-    getComments(postId, token)
-      .then((res) => {
-        if (!cancelled) setComments(res.data ?? [])
+    fetchAllComments(postId, token)
+      .then((list) => {
+        if (!cancelled) setComments(list)
       })
       .catch(() => {
         if (!cancelled) setComments([])
