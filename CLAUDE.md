@@ -46,6 +46,7 @@
 ## 남은 일
 
 - 원스토어 제출: 운영 키스토어 만들기, `.env` 에 토스 운영 키, 스토어 등록 정보(`RELEASE.md`)
+- 푸시: Firebase 프로젝트를 `itda-8eda7` 로 새로 만들었다. 새 FCM V1 서비스 계정 키를 Expo 에 올리고 실기기로 수신 확인이 남았다
 - 테스트 계정 두 기기 확인 완료: 채팅 실시간·알림·통화·화면공유·결제 완료 카드·계약서 보기. 남은 것: 계약서 제안→서명 제출, 서비스 등록·수정, 커뮤니티 댓글
 - 배포는 안드로이드 원스토어만(iOS 미배포). 원스토어 등록 단계에서는 사용자에게 로그인을 먼저 요청한다
 - 통화 중 백그라운드 마이크 유지(포그라운드 서비스)
@@ -58,14 +59,17 @@
 
 ```bash
 npx expo start --port 8081                      # 개발 서버
-adb reverse tcp:8081 tcp:8081                   # 에뮬레이터 연결
-# 네이티브 모듈을 추가했으면 개발 빌드를 다시 만든다
-export JAVA_HOME=/Library/Java/JavaVirtualMachines/zulu-17.jdk/Contents/Home ANDROID_HOME=~/Library/Android/sdk
+adb reverse tcp:8081 tcp:8081                   # 에뮬레이터·USB 실기기 연결
+# 네이티브 모듈을 추가했으면 개발 빌드를 다시 만든다. JDK 17 이면 배포판은 상관없다(zulu·corretto 등, `/usr/libexec/java_home -V` 로 경로 확인)
+export JAVA_HOME=$(/usr/libexec/java_home -v 17) ANDROID_HOME=~/Library/Android/sdk
 npx expo prebuild --platform android --no-install
 cd android && ./gradlew assembleDebug -PreactNativeArchitectures=arm64-v8a
 adb install -r app/build/outputs/apk/debug/app-debug.apk
 ./scripts/build-release.sh [apk|aab]             # 릴리스(keystore.properties 필요)
 ```
+
+Expo Go 로는 열리지 않는다(아고라·Firebase 등 네이티브 모듈). 개발 빌드("잇다" 앱)를 설치해 그 앱으로 연다.
+빌드 전에 `.env`(`.env.example` 복사)와 `google-services.json` 이 프로젝트 루트에 있어야 한다. 후자가 없으면 prebuild 가 실패한다.
 
 딥링크로 화면 바로 열기: `adb shell am start -a android.intent.action.VIEW -d "itda://item/78" store.idta.app`
 
