@@ -126,7 +126,7 @@ export default function Page() {
           <Text size="2xl" weight="semibold" color={colors.ink}>
             광고
           </Text>
-          <MoreLink />
+          <MoreLink section="ad" />
         </View>
         {loading ? (
           <CardRow itemWidth={adWidth} gap={AD_GAP}>
@@ -147,8 +147,8 @@ export default function Page() {
         )}
       </View>
 
-      <ServiceSection title="이웃들이 많이 찾아요" loading={loading} posts={popularPosts} />
-      <ServiceSection title="재방문율이 높아요" loading={loading} posts={revisitPosts} />
+      <ServiceSection title="이웃들이 많이 찾아요" section="popular" loading={loading} posts={popularPosts} />
+      <ServiceSection title="재방문율이 높아요" section="revisit" loading={loading} posts={revisitPosts} />
 
       <Footer />
     </ScrollView>

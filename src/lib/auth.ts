@@ -49,11 +49,12 @@ export async function sendEmailChangeCode(email: string) {
 }
 
 // 전화번호 인증코드 전송
+// 웹은 번호를 문자열 그대로 보내지만, 서버 스펙은 { recipientNumber } 객체라 문자열은 400(본문 읽기 실패)이 난다
 export async function sendPhoneVerifyCode(phone: string) {
   const res = await fetch(apiUrl('/phone/send'), {
     method: 'POST',
     headers: jsonHeaders(),
-    body: JSON.stringify(phone),
+    body: JSON.stringify({ recipientNumber: phone }),
   })
   if (!res.ok) throw new Error('인증코드 전송 실패')
   return res.json()

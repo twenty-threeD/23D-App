@@ -361,8 +361,8 @@ export default function Page() {
         </View>
 
         <View style={styles.related}>
-          <ServiceSection title="재방문율이 높아요" loading={false} posts={revisitPosts} />
-          <ServiceSection title="이웃들이 많이 찾아요" loading={false} posts={popularPosts} />
+          <ServiceSection title="재방문율이 높아요" section="revisit" loading={false} posts={revisitPosts} />
+          <ServiceSection title="이웃들이 많이 찾아요" section="popular" loading={false} posts={popularPosts} />
         </View>
       </ScrollView>
 
