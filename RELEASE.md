@@ -79,11 +79,12 @@ $ANDROID_HOME/build-tools/<버전>/apksigner verify --print-certs android/app/bu
 서버가 Expo 푸시(`ExponentPushToken[…]`)로 채팅·전화 알림을 보내고, Expo 가 안드로이드에서는 FCM 으로 넘긴다.
 
 - Expo 프로젝트: `@16bit_16/itda`(`app.json` 의 `extra.eas.projectId`). 이게 있어야 푸시 토큰이 나온다
-- Firebase 프로젝트: `itda-5c387`(안드로이드 앱 `store.idta.app` 등록)
+- Firebase 프로젝트: `itda-8eda7`(안드로이드 앱 `store.idta.app` 등록). 예전 `itda-5c387` 은 지금 팀 계정에서 접근할 수 없어 새로 만들었다
 - `google-services.json`: Firebase 콘솔 → 프로젝트 설정 → 내 앱에서 받는다. 프로젝트 루트에 두면 prebuild 가 넣는다.
   없으면 토큰 발급이 실패해 푸시가 오지 않는다(빌드 스크립트가 막는다)
 - FCM V1 서비스 계정 키: 서버(Expo)가 FCM 으로 보낼 때 쓰는 비밀키. `eas credentials -p android` →
-  Google Service Account → Push Notifications (FCM V1) 로 Expo 에 올려 두었다. 키를 새로 만들면 다시 올린다
+  Google Service Account → Push Notifications (FCM V1) 로 Expo 에 올린다(expo.dev → Credentials → Android 에서도 된다).
+  Firebase 프로젝트나 키를 바꾸면 반드시 다시 올린다. 안 올리면 토큰은 나오지만 푸시가 오지 않는다
 - 키·설정 파일 원본은 `~/itda-keys` 에 서명 키와 함께 둔다
 - 소셜 로그인은 카카오·네이버만 지원한다(구글은 웹뷰 로그인을 막는다).
 
