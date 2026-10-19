@@ -2,7 +2,6 @@ import { useEffect, useRef, useState } from 'react'
 import { FlatList, Pressable, StyleSheet, useWindowDimensions, View } from 'react-native'
 import { router, useLocalSearchParams } from 'expo-router'
 import Text from '@/components/ui/Text'
-import Button from '@/components/ui/Button'
 import BackHeader from '@/components/BackHeader'
 import TopButton from '@/components/TopButton'
 import ServiceCard, { ServiceCardSkeleton } from '@/components/main/ServiceCard'
@@ -38,6 +37,7 @@ export default function Page() {
   // 어떤 조건으로 받은 결과인지 같이 들고, 지금 조건과 다르면 불러오는 중으로 본다 (effect 안에서 setState 를 먼저 부르지 않기 위함)
   const [result, setResult] = useState<{ key: string; posts: Post[]; total: number; page: number; last: boolean } | null>(null)
   const [loadingMore, setLoadingMore] = useState(false)
+  const loadingMoreRef = useRef(false)
   const [showTop, setShowTop] = useState(false)
 
   const queryKey = `${categoryId ?? ''}|${sort}`
@@ -68,8 +68,11 @@ export default function Page() {
     router.setParams({ categoryId: next.categoryId ?? categoryId ?? '', sort: next.sort ?? sort })
   }
 
+  // 웹은 '더 보기' 버튼으로 다음 페이지를 받지만, 앱은 검색 화면처럼 목록 끝에 가까워지면 이어 붙인다
   async function handleLoadMore() {
-    if (loading) return
+    // 스크롤로 자동으로 부르므로 같은 페이지를 겹쳐 부르지 않게 막는다. state 는 다음 렌더에야 바뀌어 ref 로 본다
+    if (loading || isLast || loadingMoreRef.current) return
+    loadingMoreRef.current = true
     const requestedKey = queryKey
     setLoadingMore(true)
     try {
@@ -80,6 +83,7 @@ export default function Page() {
     } catch {
       setResult((prev) => (prev && prev.key === requestedKey ? { ...prev, last: true } : prev))
     } finally {
+      loadingMoreRef.current = false
       setLoadingMore(false)
     }
   }
@@ -160,14 +164,14 @@ export default function Page() {
           </View>
         }
         ListFooterComponent={
-          !loading && !isLast ? (
-            <View style={styles.footer}>
-              <Button variant="secondary" loading={loadingMore} onPress={() => void handleLoadMore()}>
-                {loadingMore ? '불러오는 중...' : '더 보기'}
-              </Button>
-            </View>
+          loadingMore ? (
+            <Text size="sm" color={colors.inkMuted} align="center" style={styles.footer}>
+              불러오는 중...
+            </Text>
           ) : null
         }
+        onEndReached={() => void handleLoadMore()}
+        onEndReachedThreshold={0.6}
         contentContainerStyle={styles.content}
         onScroll={(e) => setShowTop(e.nativeEvent.contentOffset.y > 600)}
         scrollEventThrottle={100}
