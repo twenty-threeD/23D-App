@@ -256,3 +256,13 @@ export function getFavoritePosts(token: string, page = 0, size = 20) {
     return list
   })
 }
+
+// 메인 '이웃들이 많이 찾아요'·'재방문율이 높아요' 줄의 기준(웹과 같다).
+// 기본 목록은 최신 20개뿐이라 그 안에서 줄 세우면 전체에서 상위인 글이 빠져 서버 정렬로 따로 받는다.
+// 재방문율(repeatRate)은 같은 갑이 두 번 이상 결제한 비율이다. 구매자가 적은 글의 보정과 동률 시 조회수 순은 서버가 맡는다
+export const POPULAR_SORT = 'viewCount,desc'
+export const REVISIT_SORT = 'repeatRate,desc'
+
+export async function getRankedPosts(sort: string, size = 10) {
+  return (await searchPostsPaged({ sort, size })).posts
+}

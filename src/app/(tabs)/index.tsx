@@ -8,7 +8,7 @@ import AdCard, { AdCardSkeleton } from '@/components/main/AdCard'
 import ServiceSection, { Empty, MoreLink } from '@/components/main/ServiceSection'
 import Footer from '@/components/main/Footer'
 import { colors, PAGE_X } from '@/constants/theme'
-import { CATEGORIES, getPostCategories, getPosts, type Post, type PostCategory } from '@/lib/post'
+import { CATEGORIES, getPostCategories, getPosts, getRankedPosts, POPULAR_SORT, REVISIT_SORT, type Post, type PostCategory } from '@/lib/post'
 import { invalidate } from '@/lib/cache'
 import { useAuthStore } from '@/store/authStore'
 
@@ -20,6 +20,8 @@ export default function Page() {
   const { width } = useWindowDimensions()
   const [searchValue, setSearchValue] = useState('')
   const [posts, setPosts] = useState<Post[]>([])
+  const [popularPosts, setPopularPosts] = useState<Post[]>([])
+  const [revisitPosts, setRevisitPosts] = useState<Post[]>([])
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
   const [categories, setCategories] = useState<PostCategory[]>([])
@@ -33,12 +35,18 @@ export default function Page() {
 
   useEffect(() => {
     let cancelled = false
-    getPosts(token)
-      .then((list) => {
-        if (!cancelled) setPosts(list)
-      })
-      .catch(() => {
-        if (!cancelled) setPosts([])
+    // 줄마다 따로 받아 한 줄이 실패해도 나머지는 보여준다
+    const empty = () => [] as Post[]
+    Promise.all([
+      getPosts(token).catch(empty),
+      getRankedPosts(POPULAR_SORT).catch(empty),
+      getRankedPosts(REVISIT_SORT).catch(empty),
+    ])
+      .then(([list, popular, revisit]) => {
+        if (cancelled) return
+        setPosts(list)
+        setPopularPosts(popular)
+        setRevisitPosts(revisit)
       })
       .finally(() => {
         if (cancelled) return
@@ -70,9 +78,8 @@ export default function Page() {
   }
 
   // 카드가 화면 오른쪽 밖으로 이어져야 넘길 거리가 생긴다. 줄마다 넉넉히 채운다(웹과 같은 규칙)
+  // 광고는 서버에 광고 API 가 없어 웹처럼 전체 목록 앞쪽을 쓴다
   const adPosts = posts.slice(0, 8)
-  const popularPosts = posts.slice(0, 10)
-  const revisitPosts = [...posts.slice(4), ...posts.slice(0, 4)].slice(0, 10)
 
   const adWidth = Math.min(360, Math.round(width * 0.85))
   const chipWidth = (width - PAGE_X * 2 - CHIP_GAP * 3) / 4
