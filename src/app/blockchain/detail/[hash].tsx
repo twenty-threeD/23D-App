@@ -4,6 +4,7 @@ import { router, useLocalSearchParams } from 'expo-router'
 import * as Clipboard from 'expo-clipboard'
 import { Ionicons } from '@expo/vector-icons'
 import Text from '@/components/ui/Text'
+import Skeleton from '@/components/ui/Skeleton'
 import { toast } from '@/components/ui/Toast'
 import BackHeader from '@/components/BackHeader'
 import ChainSearchInput from '@/components/blockchain/ChainSearchInput'
@@ -27,19 +28,23 @@ function CopyButton({ value, label }: { value: string; label: string }) {
 }
 
 /** 트랜잭션 정보 카드의 한 줄. 값이 없으면 '-' 를 보여주고 복사 버튼은 감춘다 */
-function Field({ label, value, copyable = false }: { label: string; value: string | null; copyable?: boolean }) {
+function Field({ label, value, copyable = false, loading = false }: { label: string; value: string | null; copyable?: boolean; loading?: boolean }) {
   return (
     <View style={styles.field}>
       <Text size="xs" weight="medium" color={colors.placeholder}>
         {label}
       </Text>
-      <View style={styles.valueRow}>
-        {/* 해시처럼 긴 값은 줄바꿈 대신 말줄임으로 한 줄을 지킨다. 전체 값은 복사 버튼으로 가져간다 */}
-        <Text weight="medium" numberOfLines={1} ellipsizeMode="middle" style={styles.shrink}>
-          {display(value)}
-        </Text>
-        {copyable && value ? <CopyButton value={value} label={label} /> : null}
-      </View>
+      {loading ? (
+        <Skeleton width="60%" height={24} />
+      ) : (
+        <View style={styles.valueRow}>
+          {/* 해시처럼 긴 값은 줄바꿈 대신 말줄임으로 한 줄을 지킨다. 전체 값은 복사 버튼으로 가져간다 */}
+          <Text weight="medium" numberOfLines={1} ellipsizeMode="middle" style={styles.shrink}>
+            {display(value)}
+          </Text>
+          {copyable && value ? <CopyButton value={value} label={label} /> : null}
+        </View>
+      )}
     </View>
   )
 }
@@ -98,6 +103,8 @@ export default function Page() {
   }, [txHash, token, requestKey])
 
   const detail = verification?.detail ?? null
+  // 응답(성공·실패) 전까지는 '-' 대신 스켈레톤을 보여준다. 실패하면 error 문구로 바뀐다
+  const loading = current === null
 
   return (
     <View style={styles.container}>
@@ -110,7 +117,7 @@ export default function Page() {
             <Text size="2xl" weight="medium">
               트랜잭션 정보
             </Text>
-            {verification ? <LedgerBadge matched={verification.ledgerMatched} /> : null}
+            {verification ? <LedgerBadge matched={verification.ledgerMatched} /> : loading ? <Skeleton width={64} height={24} radius={12} /> : null}
           </View>
           {error ? (
             <Text weight="medium" color={colors.placeholder}>
@@ -119,10 +126,11 @@ export default function Page() {
           ) : (
             <View style={styles.fields}>
               <Field label="해시(hash)" value={verification?.txHash ?? txHash} copyable />
-              <Field label="높이(height)" value={verification?.height != null ? String(verification.height) : null} copyable />
-              <Field label="주문번호(orderId)" value={verification?.orderId ?? null} copyable />
-              <Field label="결제액" value={formatAmount(verification?.amount ?? null)} />
-              <Field label="결제 일시" value={verification?.paidAt ?? null} />
+              {/* 해시는 주소에서 이미 알고 있어 불러오는 중에도 그대로 보여준다 */}
+              <Field label="높이(height)" value={verification?.height != null ? String(verification.height) : null} copyable loading={loading} />
+              <Field label="주문번호(orderId)" value={verification?.orderId ?? null} copyable loading={loading} />
+              <Field label="결제액" value={formatAmount(verification?.amount ?? null)} loading={loading} />
+              <Field label="결제 일시" value={verification?.paidAt ?? null} loading={loading} />
               {/* 결제 당사자에게만 계약 상세가 내려온다 */}
               {detail && verification ? (
                 <>
@@ -148,7 +156,9 @@ export default function Page() {
           <Text size="2xl" weight="medium">
             트랜잭션 검증여부
           </Text>
-          {verification === null ? (
+          {loading ? (
+            <Skeleton width={96} height={28} />
+          ) : verification === null ? (
             <Text size="xl" weight="medium" color={colors.placeholder}>
               {error ?? '조회 중'}
             </Text>

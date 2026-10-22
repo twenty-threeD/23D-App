@@ -3,6 +3,7 @@ import { Pressable, ScrollView, StyleSheet, View } from 'react-native'
 import { router } from 'expo-router'
 import { MaterialCommunityIcons } from '@expo/vector-icons'
 import Text from '@/components/ui/Text'
+import Skeleton from '@/components/ui/Skeleton'
 import ChainSearchInput from '@/components/blockchain/ChainSearchInput'
 import BlockHeightCounter from '@/components/blockchain/BlockHeightCounter'
 import HelpTooltip from '@/components/blockchain/HelpTooltip'
@@ -46,7 +47,7 @@ function CardTitle({ icon, children, help, onMore }: { icon: keyof typeof Materi
   )
 }
 
-function Stat({ label, value, help }: { label: string; value: string | number | null; help: string }) {
+function Stat({ label, value, help, loading = false }: { label: string; value: string | number | null; help: string; loading?: boolean }) {
   return (
     <View style={styles.stat}>
       <View style={styles.titleWithHelp}>
@@ -55,9 +56,13 @@ function Stat({ label, value, help }: { label: string; value: string | number | 
         </Text>
         <HelpTooltip title={label}>{help}</HelpTooltip>
       </View>
-      <Text size="2xl" weight="semibold" color={colors.main}>
-        {display(value)}
-      </Text>
+      {loading ? (
+        <Skeleton width={56} height={32} />
+      ) : (
+        <Text size="2xl" weight="semibold" color={colors.main}>
+          {display(value)}
+        </Text>
+      )}
     </View>
   )
 }
@@ -92,11 +97,15 @@ function padRows(rows: Cells[]): Cells[] {
   return [...rows, ...Array<Cells>(Math.max(0, ROW_LIMIT - rows.length)).fill([EMPTY, EMPTY])]
 }
 
+// 처음 받기 전에는 '-' 행 대신 같은 높이의 스켈레톤 행을 채운다. 실패하면 기존처럼 '-' 행으로 남는다
+const SKELETON_ROWS = Array.from({ length: ROW_LIMIT }, (): Cells => [<Skeleton key="left" width={96} height={24} />, <Skeleton key="right" width={88} height={20} />])
+
 export default function Page() {
   const [blockHeight, setBlockHeight] = useState<number | null>(null)
   const [heightError, setHeightError] = useState(false)
-  const [networkInfo, setNetworkInfo] = useState<NetworkInfo | null>(null)
-  const [activity, setActivity] = useState<RecentActivity | null>(null)
+  // undefined 는 아직 첫 응답 전(스켈레톤), null 은 받기 실패('-')로 구분한다
+  const [networkInfo, setNetworkInfo] = useState<NetworkInfo | null | undefined>(undefined)
+  const [activity, setActivity] = useState<RecentActivity | null | undefined>(undefined)
 
   useEffect(
     () =>
@@ -139,7 +148,11 @@ export default function Page() {
         >
           블록 높이
         </CardTitle>
-        <BlockHeightCounter value={blockHeight !== null && !heightError ? blockHeight : null} />
+        {blockHeight === null && !heightError ? (
+          <Skeleton width={160} height={40} />
+        ) : (
+          <BlockHeightCounter value={blockHeight !== null && !heightError ? blockHeight : null} />
+        )}
       </View>
 
       <View style={styles.card}>
@@ -147,9 +160,10 @@ export default function Page() {
           네트워크 정보
         </CardTitle>
         <View style={styles.stats}>
-          <Stat label="운용 노드" value={networkInfo?.nodes ?? null} help="결제 기록의 사본을 보관하고 있는 컴퓨터의 수예요." />
-          <Stat label="트랜잭션 검증자" value={networkInfo?.validators ?? null} help="새 블록을 만들고 올바른 결제인지 검증하는 노드 수예요." />
+          <Stat loading={networkInfo === undefined} label="운용 노드" value={networkInfo?.nodes ?? null} help="결제 기록의 사본을 보관하고 있는 컴퓨터의 수예요." />
+          <Stat loading={networkInfo === undefined} label="트랜잭션 검증자" value={networkInfo?.validators ?? null} help="새 블록을 만들고 올바른 결제인지 검증하는 노드 수예요." />
           <Stat
+            loading={networkInfo === undefined}
             label="평균 블록 생성 시간"
             value={formatBlockTime(networkInfo?.avgBlockTimeSec ?? null)}
             help="새 블록 하나가 만들어지는 데 걸리는 평균 시간이에요."
@@ -167,7 +181,7 @@ export default function Page() {
         </CardTitle>
         <View style={styles.table}>
           <TableRow header cells={['블록높이', '시간 · TX 수']} />
-          {padRows(
+          {(activity === undefined ? SKELETON_ROWS : padRows(
             blocks.map((block): Cells => [
               <Pressable
                 key={block.height}
@@ -177,7 +191,7 @@ export default function Page() {
               </Pressable>,
               `${display(formatRelativeTime(block.time, now))} · ${block.txCount} tx`,
             ]),
-          ).map((cells, index) => (
+          )).map((cells, index) => (
             <TableRow key={blocks[index]?.height ?? `empty-${index}`} cells={cells} />
           ))}
         </View>
@@ -194,14 +208,14 @@ export default function Page() {
         <View style={styles.table}>
           {/* 휴대폰 폭에서는 세 칸이 겹쳐 덜 찾는 서명자 칸을 뺀다(웹 모바일과 같다) */}
           <TableRow header cells={['트랜잭션 해시', '결제 ID']} />
-          {padRows(
+          {(activity === undefined ? SKELETON_ROWS : padRows(
             transactions.map((tx): Cells => [
               <Pressable key={tx.hash} onPress={() => openTx(tx.hash)}>
                 <Text weight="medium">{display(truncateHash(tx.hash))}</Text>
               </Pressable>,
               display(truncatePaymentId(tx.paymentId)),
             ]),
-          ).map((cells, index) => (
+          )).map((cells, index) => (
             <TableRow key={transactions[index]?.hash ?? `empty-${index}`} cells={cells} />
           ))}
         </View>

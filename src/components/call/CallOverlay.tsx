@@ -260,11 +260,13 @@ const styles = StyleSheet.create({
   chipOn: { backgroundColor: 'rgba(254,106,76,0.9)' },
   minimize: { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center' },
   stage: { flex: 1, padding: 16, alignItems: 'center', justifyContent: 'center' },
-  mainVideo: { width: '100%', height: '100%', borderRadius: 24, overflow: 'hidden', backgroundColor: 'rgba(0,0,0,0.5)' },
-  speakingRing: { borderWidth: 4, borderColor: colors.main },
+  // 말할 때만 테두리를 붙이면 그때마다 안쪽 영상 크기가 바뀌어, 안드로이드 SurfaceView 가 따라가지 못하고
+  // 영상 위에 검은 박스가 남았다. 테두리 두께는 늘 두고 색만 바꾼다
+  mainVideo: { width: '100%', height: '100%', borderRadius: 24, overflow: 'hidden', borderWidth: 4, borderColor: 'transparent', backgroundColor: 'rgba(0,0,0,0.5)' },
+  speakingRing: { borderColor: colors.main },
   pips: { position: 'absolute', top: 16, right: 16, gap: 12, alignItems: 'flex-end' },
-  pip: { width: 108, height: 160, borderRadius: 16, overflow: 'hidden', backgroundColor: 'rgba(0,0,0,0.6)' },
-  speakingRingSmall: { borderWidth: 3, borderColor: colors.main },
+  pip: { width: 108, height: 160, borderRadius: 16, overflow: 'hidden', borderWidth: 3, borderColor: 'transparent', backgroundColor: 'rgba(0,0,0,0.6)' },
+  speakingRingSmall: { borderColor: colors.main },
   pipLabel: { position: 'absolute', left: 8, bottom: 8, paddingHorizontal: 8, paddingVertical: 2, borderRadius: 6, backgroundColor: 'rgba(0,0,0,0.5)' },
   pipLabelText: { fontSize: 11, lineHeight: 14 },
   profile: { alignItems: 'center', gap: 28 },

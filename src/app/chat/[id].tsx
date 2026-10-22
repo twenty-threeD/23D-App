@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
-  ActivityIndicator,
   FlatList,
   KeyboardAvoidingView,
   Linking,
@@ -30,6 +29,7 @@ import CallLogCard from '@/components/chat/CallLogCard'
 import ContractWizardModal from '@/components/chat/ContractWizardModal'
 import ContractViewerModal from '@/components/chat/ContractViewerModal'
 import CallSessionBubble from '@/components/chat/CallSessionBubble'
+import Skeleton from '@/components/ui/Skeleton'
 import { useCallStore } from '@/store/callStore'
 import type { CallType } from '@/lib/call'
 import { colors, FONT_FAMILY, radius } from '@/constants/theme'
@@ -853,15 +853,27 @@ export default function Page() {
           />
           {/* 뒤집힌 목록은 비었을 때 안내가 거꾸로 그려져 목록 밖에 겹쳐 둔다 */}
           {messages.length === 0 ? (
-            <View style={styles.emptyOverlay} pointerEvents="none">
-              {loadingMessages || !selectedRoom ? (
-                <ActivityIndicator color={colors.main} />
-              ) : (
+            loadingMessages || !selectedRoom ? (
+              // 스피너 대신 말풍선 모양 자리표시자. 최신 메시지가 아래에 붙는 목록이라 아래쪽부터 받은·보낸 말풍선을 번갈아 둔다
+              <View style={styles.skeletonOverlay} pointerEvents="none">
+                {SKELETON_BUBBLES.map((b, i) => (
+                  <View key={i} style={b.sent ? styles.alignEnd : undefined}>
+                    <Skeleton
+                      width={b.width}
+                      height={b.height}
+                      radius={radius['2xl']}
+                      style={b.sent ? styles.skeletonSent : styles.skeletonReceived}
+                    />
+                  </View>
+                ))}
+              </View>
+            ) : (
+              <View style={styles.emptyOverlay} pointerEvents="none">
                 <Text size="sm" color={colors.zinc400}>
                   대화를 시작해보세요.
                 </Text>
-              )}
-            </View>
+              </View>
+            )
           ) : null}
         </View>
 
@@ -1010,6 +1022,15 @@ function AttachButton({
   )
 }
 
+// 대화를 불러오는 동안 보여줄 말풍선 자리표시자(위→아래). 길이를 섞어 실제 대화처럼 보이게 한다
+const SKELETON_BUBBLES = [
+  { sent: false, width: '55%', height: 40 },
+  { sent: true, width: '40%', height: 40 },
+  { sent: false, width: '65%', height: 60 },
+  { sent: true, width: '50%', height: 40 },
+  { sent: false, width: '35%', height: 40 },
+] as const
+
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.white },
   flex: { flex: 1 },
@@ -1053,6 +1074,20 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  // messages 와 같은 여백·간격을 써서 불러온 뒤 첫 말풍선이 같은 자리에 놓이게 한다
+  skeletonOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    justifyContent: 'flex-end',
+    paddingHorizontal: 12,
+    paddingVertical: 20,
+    gap: 16,
+  },
+  skeletonSent: { borderBottomRightRadius: 0 },
+  skeletonReceived: { borderBottomLeftRadius: 0 },
   messageBlock: { gap: 8 },
   dateDivider: { alignItems: 'center', paddingVertical: 8 },
   datePill: {
