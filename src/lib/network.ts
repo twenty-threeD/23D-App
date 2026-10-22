@@ -11,6 +11,10 @@ import { API_URL, CHAIN_REST_URL } from './config'
 
 const OFFLINE_AFTER_MS = 5000
 const RETRY_INTERVAL_MS = 3000
+// RN 안드로이드 fetch(OkHttp)는 제한 시간이 없다. 와이파이가 붙는 도중에 나간 요청은 응답 없이 몇 분씩 멈춰,
+// 연결이 돌아와도 화면이 스켈레톤에 갇혔다. 붙드는 요청은 회차마다 제한 시간을 두고 넘으면 다시 보낸다
+const ATTEMPT_TIMEOUT_MS = 15000
+const PROBE_TIMEOUT_MS = 5000
 const HOSTS = [API_URL, CHAIN_REST_URL]
 
 interface NetworkState {
@@ -28,9 +32,17 @@ let lastResponseAt = 0
 // 연결을 기다리며 붙들고 있는 요청들을 다시 보내게 깨우는 함수들
 let waiters: (() => void)[] = []
 let retryTimer: ReturnType<typeof setInterval> | null = null
+// 붙든 요청의 진행 중인 회차. 연결이 돌아온 순간 끊긴 동안 나간 회차를 끊고 바로 다시 보내려고 들고 있는다
+const attempts = new Map<AbortController, { reconnected: boolean }>()
 
 function markResponse() {
   lastResponseAt = Date.now()
+  if (useNetworkStore.getState().offline) {
+    attempts.forEach((state, controller) => {
+      state.reconnected = true
+      controller.abort()
+    })
+  }
   setOffline(false)
 }
 
@@ -53,12 +65,32 @@ let originalFetch: typeof fetch = (...args) => fetch(...args)
 // 붙든 요청이 없어도(POST 실패만 있었던 경우 등) 오프라인 화면이 저절로 걷히도록 서버에 직접 닿는지 확인한다.
 // 상태 코드는 상관없다. 응답이 오기만 하면 연결된 것이다
 async function probe() {
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), PROBE_TIMEOUT_MS)
   try {
-    await originalFetch(API_URL, { method: 'HEAD' })
+    await originalFetch(API_URL, { method: 'HEAD', signal: controller.signal })
     markResponse()
     return true
   } catch {
     return false
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
+// 붙드는 요청의 한 회차. 제한 시간을 넘기거나 연결이 돌아와 끊기면 { retryNow } 로 알린다
+async function attempt(input: RequestInfo | URL, init: RequestInit | undefined) {
+  const controller = new AbortController()
+  const state = { reconnected: false }
+  attempts.set(controller, state)
+  const timer = setTimeout(() => controller.abort(), ATTEMPT_TIMEOUT_MS)
+  try {
+    return { res: await originalFetch(input, { ...init, signal: controller.signal }) }
+  } catch {
+    return { res: null, retryNow: state.reconnected }
+  } finally {
+    clearTimeout(timer)
+    attempts.delete(controller)
   }
 }
 
@@ -114,7 +146,7 @@ export function installNetworkGuard() {
     // GET 이 아닌 요청은 다시 보내면 두 번 처리될 수 있어(결제·작성) 실패를 그대로 돌려준다
     const holdOnFailure = method === 'GET' && !init?.signal
 
-    for (;;) {
+    if (!holdOnFailure) {
       try {
         const res = await originalFetch(input, init)
         clearTimeout(timer)
@@ -123,9 +155,18 @@ export function installNetworkGuard() {
       } catch (error) {
         // 호출부가 끊은 건 연결 문제가 아니다(제한 시간·화면 이탈)
         if (isAbort(error)) clearTimeout(timer)
-        if (!holdOnFailure || isAbort(error)) throw error
-        await waitForRetry()
+        throw error
       }
+    }
+
+    for (;;) {
+      const result = await attempt(input, init)
+      if (result.res) {
+        clearTimeout(timer)
+        markResponse()
+        return result.res
+      }
+      if (!result.retryNow) await waitForRetry()
     }
   }
 
