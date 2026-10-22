@@ -7,6 +7,7 @@ import PostImage from '@/components/PostImage'
 import { colors } from '@/constants/theme'
 import { getPostMainImage, type Post } from '@/lib/post'
 import { parsePostContent } from '@/lib/priceCard'
+import { usePostAverageRating } from '@/hooks/usePostAverageRating'
 
 export function AdCardSkeleton({ width }: { width: number }) {
   return (
@@ -24,6 +25,7 @@ export function AdCardSkeleton({ width }: { width: number }) {
 // 광고 줄 카드. 휴대폰에서는 한 장이 화면 폭의 85% 를 차지한다(웹 w-[min(360px,85vw)])
 export default function AdCard({ post, width }: { post: Post; width: number }) {
   const description = parsePostContent(post.content).description || post.content
+  const average = usePostAverageRating(post.id)
 
   return (
     <Pressable
@@ -40,7 +42,7 @@ export default function AdCard({ post, width }: { post: Post; width: number }) {
           <View style={styles.rating}>
             <Ionicons name="star" size={14} color={colors.main} />
             <Text size="sm" color={colors.inkSub}>
-              {(0).toFixed(1)}
+              {average.toFixed(1)}
             </Text>
           </View>
         </View>

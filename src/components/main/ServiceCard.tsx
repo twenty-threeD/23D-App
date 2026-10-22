@@ -8,6 +8,7 @@ import { colors, radius } from '@/constants/theme'
 import { getPostMainImage, type Post } from '@/lib/post'
 import { parsePostContent } from '@/lib/priceCard'
 import { formatNumber } from '@/lib/http'
+import { usePostAverageRating } from '@/hooks/usePostAverageRating'
 
 // 가로 스크롤 줄에서는 시안 폭(260px)을 그대로 쓰고, 목록 그리드(inGrid)에서는 두 칸에 맞춰 늘린다(웹 cardClasses)
 const ROW = { width: 260, height: 360, imageHeight: 180 }
@@ -48,6 +49,7 @@ interface ServiceCardProps {
 export default function ServiceCard({ post, inGrid = false }: ServiceCardProps) {
   const { description, plans } = parsePostContent(post.content)
   const price = formatStartPrice(plans[0]?.price)
+  const average = usePostAverageRating(post.id)
 
   return (
     <View style={[styles.root, inGrid ? styles.gridRoot : styles.rowRoot]}>
@@ -63,9 +65,8 @@ export default function ServiceCard({ post, inGrid = false }: ServiceCardProps) 
           <View style={styles.meta}>
             <View style={styles.rating}>
               <Ionicons name="star" size={inGrid ? 12 : 14} color={colors.main} />
-              {/* 웹과 같이 아직 평점 요약 API 가 없어 0.0 으로 둔다 */}
               <Text size={inGrid ? 'xs' : 'sm'} color={colors.inkSub}>
-                {(0).toFixed(1)}
+                {average.toFixed(1)}
               </Text>
             </View>
             {price ? (
