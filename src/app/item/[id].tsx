@@ -4,6 +4,7 @@ import { router, useLocalSearchParams, usePathname } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import Text from '@/components/ui/Text'
+import Skeleton from '@/components/ui/Skeleton'
 import Button from '@/components/ui/Button'
 import Select from '@/components/ui/Select'
 import TextField from '@/components/ui/TextField'
@@ -179,13 +180,34 @@ export default function Page() {
     )
   }
 
+  // 불러오는 동안 실제 화면과 같은 자리(헤더 이미지·제목·가격 카드·설명·리뷰)를 잡아 두어 받은 뒤 화면이 튀지 않게 한다
   if (loading || !post) {
     return (
       <View style={styles.container}>
         <BackHeader />
-        <Text color={colors.inkMuted} align="center" style={styles.message}>
-          불러오는 중...
-        </Text>
+        <ScrollView contentContainerStyle={styles.content} scrollEnabled={false}>
+          <View style={styles.main}>
+            <Skeleton height={180} radius={radius['2xl']} />
+            <View style={styles.titleBlock}>
+              <Skeleton width="70%" height={28} />
+              <Skeleton width={96} height={18} />
+            </View>
+            <Skeleton height={200} radius={radius.xl} />
+            <View style={styles.block}>
+              <Skeleton width={120} height={28} />
+              <View style={styles.skeletonLines}>
+                <Skeleton height={16} />
+                <Skeleton height={16} />
+                <Skeleton height={16} />
+                <Skeleton width="60%" height={16} />
+              </View>
+            </View>
+            <View style={styles.reviewHeader}>
+              <Skeleton width={60} height={28} />
+              <Skeleton width={180} height={24} />
+            </View>
+          </View>
+        </ScrollView>
       </View>
     )
   }
@@ -436,6 +458,9 @@ const styles = StyleSheet.create({
   },
   description: {
     lineHeight: 22,
+  },
+  skeletonLines: {
+    gap: 6,
   },
   expand: {
     height: 48,

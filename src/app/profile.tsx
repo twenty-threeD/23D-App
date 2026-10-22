@@ -5,6 +5,7 @@ import { Image } from 'expo-image'
 import { File, Paths } from 'expo-file-system'
 import { Ionicons } from '@expo/vector-icons'
 import Text from '@/components/ui/Text'
+import Skeleton from '@/components/ui/Skeleton'
 import Button from '@/components/ui/Button'
 import Select from '@/components/ui/Select'
 import TextField, { Field } from '@/components/ui/TextField'
@@ -12,7 +13,7 @@ import { toast } from '@/components/ui/Toast'
 import BackHeader from '@/components/BackHeader'
 import LoginRequired from '@/components/LoginRequired'
 import { Avatar } from '@/components/PostImage'
-import ServiceCard from '@/components/main/ServiceCard'
+import ServiceCard, { ServiceCardSkeleton } from '@/components/main/ServiceCard'
 import AccountEditModal from '@/components/profile/AccountEditModal'
 import PasswordModal from '@/components/profile/PasswordModal'
 import { colors, PAGE_X, radius } from '@/constants/theme'
@@ -354,13 +355,45 @@ export default function Page() {
     )
   }
 
+  // 카드 두 칸 자리표시자. 찜 목록처럼 내용이 늦게 오는 칸도 받은 뒤 높이가 튀지 않게 실제 그리드와 같은 폭으로 둔다
+  const gridSkeleton = (
+    <View style={styles.grid}>
+      {[0, 1].map((i) => (
+        <View key={i} style={[styles.gridItem, { width: columnWidth }]}>
+          <ServiceCardSkeleton inGrid />
+        </View>
+      ))}
+    </View>
+  )
+
+  // 불러오는 동안 실제 화면(프로필 카드·계정 정보·내 게시글)과 같은 자리를 잡아 둔다
   if (loading || !profile) {
     return (
       <View style={styles.container}>
         <BackHeader title="프로필" />
-        <Text color={colors.zinc400} align="center" style={styles.message}>
-          불러오는 중...
-        </Text>
+        <ScrollView contentContainerStyle={styles.content} scrollEnabled={false}>
+          <View style={styles.card}>
+            <View style={styles.identity}>
+              <Skeleton width={96} height={96} radius={48} />
+              <View style={styles.identityTexts}>
+                <Skeleton width={120} height={24} />
+                <Skeleton width="80%" height={14} />
+              </View>
+            </View>
+            <Skeleton width="90%" height={16} />
+            <View style={styles.endRow}>
+              <Skeleton width={110} height={40} radius={radius.lg} />
+            </View>
+          </View>
+          <View style={styles.section}>
+            <Skeleton width={90} height={22} />
+            <Skeleton height={100} radius={radius.lg} />
+          </View>
+          <View style={styles.section}>
+            <Skeleton width={130} height={22} />
+            {gridSkeleton}
+          </View>
+        </ScrollView>
       </View>
     )
   }
@@ -606,9 +639,7 @@ export default function Page() {
         <View style={styles.section}>
           <SectionTitle>찜한 목록</SectionTitle>
           {favorites === null ? (
-            <Text size="sm" color={colors.zinc400}>
-              불러오는 중...
-            </Text>
+            gridSkeleton
           ) : favorites.length === 0 ? (
             <Text size="sm" color={colors.zinc400}>
               찜한 항목이 없습니다.
@@ -679,7 +710,6 @@ export default function Page() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.white },
-  message: { paddingVertical: 80 },
   content: { padding: PAGE_X, gap: 40, paddingBottom: 48 },
   flex: { flex: 1 },
   shrink: { flexShrink: 1 },

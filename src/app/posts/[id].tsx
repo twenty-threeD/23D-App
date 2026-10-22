@@ -5,6 +5,7 @@ import { Ionicons } from '@expo/vector-icons'
 import Text from '@/components/ui/Text'
 import Button from '@/components/ui/Button'
 import TextField from '@/components/ui/TextField'
+import Skeleton from '@/components/ui/Skeleton'
 import BackHeader from '@/components/BackHeader'
 import Markdown from '@/components/Markdown'
 import ImageLightbox from '@/components/ImageLightbox'
@@ -248,13 +249,38 @@ export default function Page() {
     }
   }
 
+  // 글자 대신 실제 카드(제목 · 작성자 · 본문 · 반응 · 댓글 입력)와 같은 모양으로 자리를 잡아, 불러온 뒤 화면이 튀지 않게 한다
   if (!loaded || loaded.postId !== postId) {
     return (
       <View style={styles.container}>
         <BackHeader fallbackHref="/community" />
-        <Text color={colors.zinc400} align="center" style={styles.message}>
-          불러오는 중...
-        </Text>
+        <View style={styles.content}>
+          <View style={styles.card}>
+            <View style={styles.headerBlock}>
+              <Skeleton width="70%" height={28} />
+              <View style={styles.author}>
+                <Skeleton width={48} height={48} radius={24} />
+                <View style={styles.authorTexts}>
+                  <Skeleton width={96} height={14} />
+                  <Skeleton width={180} height={14} />
+                </View>
+              </View>
+            </View>
+            <View style={styles.rule} />
+            <View style={styles.skeletonBody}>
+              <Skeleton height={14} />
+              <Skeleton height={14} />
+              <Skeleton width="85%" height={14} />
+              <Skeleton width="60%" height={14} />
+            </View>
+            <View style={styles.reactions}>
+              <Skeleton width={84} height={24} />
+              <Skeleton width={72} height={24} />
+            </View>
+            <View style={styles.rule} />
+            <Skeleton height={176} radius={radius.lg} />
+          </View>
+        </View>
       </View>
     )
   }
@@ -450,6 +476,7 @@ const styles = StyleSheet.create({
   countRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   rule: { height: 1, backgroundColor: colors.zinc300 },
   reactions: { flexDirection: 'row', gap: 16 },
+  skeletonBody: { gap: 10 },
   comments: { gap: 8 },
   commentDivider: { borderTopWidth: 1, borderTopColor: colors.line },
   composer: {
