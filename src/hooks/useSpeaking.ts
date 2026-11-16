@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react'
-import { callEngine } from '@/lib/agoraEngine'
+import { callEngine } from '@/lib/callEngine'
 
-// 음량(0~1)이 이 값을 넘으면 말하는 중으로 본다(웹과 같은 기준)
-const SPEAKING_LEVEL = 0.08
+// 엔진은 LiveKit 서버의 판정을 0(조용함)·1(말하는 중)로 돌려준다(웹과 같은 기준)
+const SPEAKING_LEVEL = 0.5
 const POLL_MS = 150
 // 말 사이 짧은 숨에 링이 깜빡이지 않도록 한 번 켜지면 잠깐 유지한다
 const HOLD_MS = 400

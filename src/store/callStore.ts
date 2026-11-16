@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import { callEngine, ensureMediaPermission, MediaPermissionError, type AudioOutput, type CameraFacing, type RemoteVideoKind } from '@/lib/agoraEngine'
+import { callEngine, ensureMediaPermission, MediaPermissionError, type AudioOutput, type CallTrackRef, type CameraFacing, type RemoteVideoKind } from '@/lib/callEngine'
 import {
   acceptCall,
   endCall,
@@ -8,7 +8,6 @@ import {
   getRoomCalls,
   isCallOver,
   participantsOf,
-  renewCallToken,
   startCall,
   startScreenShare,
   stopScreenShare,
@@ -20,18 +19,17 @@ import {
 } from '@/lib/call'
 import { ApiError } from '@/lib/apiError'
 
-// 웹 store/callStore.ts 의 앱판. 상태 흐름은 웹과 같고, 미디어는 트랙 대신 원격 uid 로 들고 있다.
+// 웹 store/callStore.ts 의 앱판. 상태 흐름은 웹과 같고, 영상은 VideoTrack 에 넘길 트랙 참조로 들고 있다.
 // 웹의 출력 장치 선택 대신 휴대폰의 수화부·스피커·이어폰·블루투스 중 소리가 나올 곳을 고른다
 
 async function joinChannel(session: CallSession, video: boolean, stillConnecting: () => boolean) {
-  callEngine.setScreenUids([session.call.caller.screenUid, session.call.callee.screenUid])
   await callEngine.join(session, { video })
   if (stillConnecting()) return true
   await callEngine.leave()
   return false
 }
 
-// outgoing = 내가 걸고 기다리는 중, incoming = 벨이 울리는 중, connecting = 채널에 붙는 중, active = 통화 중
+// outgoing = 내가 걸고 기다리는 중, incoming = 벨이 울리는 중, connecting = 방에 붙는 중, active = 통화 중
 export type CallPhase = 'idle' | 'outgoing' | 'incoming' | 'connecting' | 'active'
 
 interface CallStore {
@@ -45,15 +43,15 @@ interface CallStore {
 
   micOn: boolean
   camOn: boolean
-  // 지금 소리가 나오는 곳. 고른 값이 아니라 SDK 가 알려준 실제 경로를 따른다
+  // 지금 소리가 나오는 곳. LiveKit 은 경로가 바뀌어도 알려주지 않아, 연결할 때와 사용자가 고를 때 실제 장치 목록으로 맞춘다
   audioOutput: AudioOutput
-  // 이 통화 중에 붙은 이어폰·블루투스. 그쪽으로 듣다가 스피커로 바꿔도 다시 고를 수 있게 기억해 둔다
+  // 지금 붙어 있는 이어폰·블루투스. 그쪽으로 듣다가 스피커로 바꿔도 다시 고를 수 있게 기억해 둔다
   externalOutput: Extract<AudioOutput, 'headset' | 'bluetooth'> | null
   screenOn: boolean
   busy: boolean
 
-  remoteCamUid: number | null
-  remoteScreenUid: number | null
+  remoteCamTrack: CallTrackRef | null
+  remoteScreenTrack: CallTrackRef | null
 
   activeSince: number | null
   error: string | null
@@ -65,7 +63,7 @@ interface CallStore {
 
   setMyUsername: (username: string | null) => void
   applySignal: (event: CallSignalEvent) => void
-  setRemoteVideo: (kind: RemoteVideoKind, uid: number | null) => void
+  setRemoteVideo: (kind: RemoteVideoKind, trackRef: CallTrackRef | null) => void
   setError: (message: string | null) => void
   setNotice: (message: string | null) => void
   setExpanded: (expanded: boolean) => void
@@ -79,10 +77,10 @@ interface CallStore {
   toggleMic: (token: string) => Promise<void>
   toggleCam: (token: string) => Promise<void>
   flipCamera: () => Promise<void>
-  setAudioOutput: (output: AudioOutput) => void
-  selectAudioOutput: (output: AudioOutput) => void
+  // 붙어 있는 이어폰·블루투스를 다시 확인한다. 통화 중에 꽂거나 뺄 수 있어 출력 버튼을 누를 때마다 부른다
+  refreshAudioOutputs: () => Promise<void>
+  selectAudioOutput: (output: AudioOutput) => Promise<void>
   toggleScreen: (token: string) => Promise<void>
-  renew: (token: string) => Promise<void>
   reset: () => Promise<void>
 }
 
@@ -98,8 +96,8 @@ const initial = {
   externalOutput: null,
   screenOn: false,
   busy: false,
-  remoteCamUid: null,
-  remoteScreenUid: null,
+  remoteCamTrack: null,
+  remoteScreenTrack: null,
   activeSince: null,
   error: null,
   notice: null,
@@ -110,21 +108,18 @@ const initial = {
 
 // 종료 신호 없이 채널에서만 빠졌다면 일시적인 끊김일 수 있어, 다시 들어올 시간을 준다(웹과 같다)
 const PEER_RECONNECT_TIMEOUT_MS = 15_000
-const TOKEN_RENEW_ATTEMPTS = 3
-const TOKEN_RENEW_RETRY_MS = 5_000
 let peerLeftTimer: ReturnType<typeof setTimeout> | null = null
-// 이어폰·블루투스로 바꿨을 때 실제로 그쪽으로 갔는지 확인하는 시간
-const OUTPUT_CHECK_MS = 2_000
-let outputCheckTimer: ReturnType<typeof setTimeout> | null = null
 
-function clearOutputCheck() {
-  if (outputCheckTimer) clearTimeout(outputCheckTimer)
-  outputCheckTimer = null
-}
-
-// 휴대폰 통화처럼 음성은 수화부, 영상은 스피커로 시작한다(엔진의 기본 경로와 같다). 이어폰이 꽂혀 있으면 곧 SDK 가 고쳐 준다
+// 휴대폰 통화처럼 음성은 수화부, 영상은 스피커로 시작한다(엔진의 기본 경로와 같다). 이어폰이 꽂혀 있으면 연결 뒤 맞춘다
 function defaultOutput(video: boolean): AudioOutput {
   return video ? 'speaker' : 'earpiece'
+}
+
+// 붙어 있는 외부 장치. 엔진이 블루투스를 이어폰보다 먼저 고르므로 같은 순서로 본다
+function externalOf(outputs: AudioOutput[]): Extract<AudioOutput, 'headset' | 'bluetooth'> | null {
+  if (outputs.includes('bluetooth')) return 'bluetooth'
+  if (outputs.includes('headset')) return 'headset'
+  return null
 }
 
 function clearPeerLeftTimer() {
@@ -187,17 +182,16 @@ export const useCallStore = create<CallStore>()((set, get) => ({
   setNotice: (notice) => set({ notice }),
   setExpanded: (expanded) => set({ expanded }),
 
-  setRemoteVideo: (kind, uid) =>
+  setRemoteVideo: (kind, trackRef) =>
     set(
       kind === 'screen'
-        ? { remoteScreenUid: uid, expanded: uid != null ? true : get().expanded }
-        : { remoteCamUid: uid, expanded: uid != null ? true : get().expanded },
+        ? { remoteScreenTrack: trackRef, expanded: trackRef ? true : get().expanded }
+        : { remoteCamTrack: trackRef, expanded: trackRef ? true : get().expanded },
     ),
 
   // 서버가 주는 call 은 항상 최신 전체 스냅샷이라 그대로 덮어쓴다
   applySignal: ({ signal, call, fromUsername }) => {
     const state = get()
-    callEngine.setScreenUids([call.caller.screenUid, call.callee.screenUid])
 
     if (isCallOver(call.status)) {
       if (state.phase === 'idle') return
@@ -258,6 +252,7 @@ export const useCallStore = create<CallStore>()((set, get) => ({
         await abandonCall(token, session.call.callId)
         return
       }
+      void get().refreshAudioOutputs()
       // 상대가 아주 빨리 받으면 ACCEPTED 가 join 보다 먼저 온다
       const arrived = get().call
       const accepted = arrived?.status === 'ACCEPTED'
@@ -289,6 +284,7 @@ export const useCallStore = create<CallStore>()((set, get) => ({
       const session = await acceptCall(token, call.callId)
       const joined = await joinChannel(session, video, () => get().phase === 'connecting')
       if (!joined) return
+      void get().refreshAudioOutputs()
       set({ phase: 'active', call: get().call ?? session.call, session, activeSince: Date.now(), expanded: true })
     } catch (e) {
       await callEngine.leave()
@@ -338,7 +334,8 @@ export const useCallStore = create<CallStore>()((set, get) => ({
       const joined = await joinChannel(session, video, () => get().phase === 'connecting')
       if (!joined) return
       if (!me.audioEnabled) await callEngine.setMic(false)
-      // 다른 기기(웹)에서 공유하던 상태가 서버에 남아 있으면 상대가 공유를 못 해서 푼다
+      void get().refreshAudioOutputs()
+      // 화면공유 트랙은 앱을 다시 켜면서 끊겼는데 서버에는 공유 중으로 남아 있을 수 있다. 그대로 두면 상대가 공유를 못 해서 푼다
       if (me.screenSharing) {
         const updated = await stopScreenShare(token, call.callId).catch(() => null)
         if (updated) set({ call: updated })
@@ -424,25 +421,32 @@ export const useCallStore = create<CallStore>()((set, get) => ({
     set({ cameraFacing: await callEngine.flipCamera() })
   },
 
-  setAudioOutput: (output) => {
-    clearOutputCheck()
-    set(output === 'headset' || output === 'bluetooth' ? { audioOutput: output, externalOutput: output } : { audioOutput: output })
+  refreshAudioOutputs: async () => {
+    const before = get().externalOutput
+    const external = externalOf(await callEngine.availableOutputs())
+    if (get().phase === 'idle') return
+    // 새로 붙은 장치가 있으면 엔진이 그쪽으로 돌리므로 화면도 맞춘다. 빠졌으면 엔진이 기본 경로로 돌아간다
+    if (external && external !== before) set({ externalOutput: external, audioOutput: external })
+    else if (!external && before) {
+      set({ externalOutput: null, audioOutput: get().audioOutput === before ? defaultOutput(get().camOn) : get().audioOutput })
+    }
   },
 
-  selectAudioOutput: (output) => {
-    callEngine.setAudioOutput(output)
-    // 수화부·스피커는 바로 바뀌어 먼저 보여준다. 이어폰·블루투스는 그새 빠졌을 수 있어 SDK 가 확인해 줄 때까지 기다린다
-    if (output === 'earpiece' || output === 'speaker') {
-      set({ audioOutput: output })
-      return
+  selectAudioOutput: async (output) => {
+    // 이어폰·블루투스는 고르는 사이 빠졌을 수 있어 실제로 붙어 있는지 먼저 확인한다
+    if (output === 'headset' || output === 'bluetooth') {
+      const available = await callEngine.availableOutputs()
+      if (!available.includes(output)) {
+        set({ externalOutput: null, error: output === 'bluetooth' ? '블루투스 기기를 찾지 못했어요.' : '이어폰을 찾지 못했어요.' })
+        return
+      }
     }
-    clearOutputCheck()
-    outputCheckTimer = setTimeout(() => {
-      outputCheckTimer = null
-      if (get().audioOutput === output) return
-      // 기억해 둔 기기가 그 사이 꺼졌거나 연결이 끊긴 경우. 목록에서 빼서 다시 못 고르게 한다
-      set({ externalOutput: null, error: output === 'bluetooth' ? '블루투스 기기를 찾지 못했어요.' : '이어폰을 찾지 못했어요.' })
-    }, OUTPUT_CHECK_MS)
+    try {
+      await callEngine.setAudioOutput(output)
+      set({ audioOutput: output })
+    } catch {
+      set({ error: '소리 출력을 바꾸지 못했어요.' })
+    }
   },
 
   toggleScreen: async (token) => {
@@ -456,10 +460,11 @@ export const useCallStore = create<CallStore>()((set, get) => ({
         // 빼먹으면 서버에 점유 상태가 남아 상대가 화면공유를 못 한다
         await stopScreenShare(token, call.callId).catch(() => {})
       } else {
-        const session = await startScreenShare(token, call.callId)
+        // 서버 점유를 먼저 잡는다. 상대가 공유 중이면 여기서 SCREEN_SHARE_OCCUPIED 로 막혀 권한 창을 띄우지 않는다
+        const updated = await startScreenShare(token, call.callId)
         try {
-          await callEngine.startScreen(session)
-          set({ screenOn: true, call: session.call })
+          await callEngine.startScreen()
+          set({ screenOn: true, call: updated })
         } catch (e) {
           // 권한 창에서 거부한 경우 등. 서버 점유는 풀어야 다음에 다시 시도할 수 있다
           await stopScreenShare(token, call.callId).catch(() => {})
@@ -473,27 +478,8 @@ export const useCallStore = create<CallStore>()((set, get) => ({
     }
   },
 
-  renew: async (token) => {
-    const { call, phase } = get()
-    if (!call || phase === 'incoming') return
-    // RTC 토큰 유효 시간이 짧아, 갱신이 한 번 실패하고 끝나면 통화가 끊긴다. 만료 30초 전 알림 안에서 몇 번 더 시도한다
-    for (let attempt = 0; attempt < TOKEN_RENEW_ATTEMPTS; attempt++) {
-      if (get().call?.callId !== call.callId) return
-      try {
-        const session = await renewCallToken(token, call.callId)
-        await callEngine.renewToken(session.rtcToken)
-        set({ session })
-        return
-      } catch (e) {
-        if (e instanceof ApiError && (e.status === 404 || e.status === 409)) return
-        await new Promise((r) => setTimeout(r, TOKEN_RENEW_RETRY_MS))
-      }
-    }
-  },
-
   reset: async () => {
     clearPeerLeftTimer()
-    clearOutputCheck()
     await callEngine.leave()
     // notice("왜 끝났는지")는 통화가 끝난 뒤에 쓰이므로 남겨 둔다
     set({ ...initial, notice: get().notice })

@@ -51,7 +51,7 @@
 - 배포는 안드로이드 원스토어만(iOS 미배포). 원스토어 등록 단계에서는 사용자에게 로그인을 먼저 요청한다
 - 통화 중 백그라운드 마이크 유지(포그라운드 서비스)
 - iOS 푸시: 유료 Apple Developer 계정(APNs) 필요
-- 릴리스 APK 가 약 210MB — 아고라 확장 모듈 제외·AAB 배포로 줄이기 검토
+- 릴리스 APK 크기 — 통화가 아고라에서 LiveKit 으로 바뀌어 다시 재 봐야 한다. AAB 배포로 줄이기 검토
 - iOS: Xcode 27.1 에서 시뮬레이터 빌드·실행 확인함. 화면공유는 실기기에서만 확인 가능
 - 마지막에 `release` → `main` 머지
 
@@ -68,7 +68,7 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
 ./scripts/build-release.sh [apk|aab]             # 릴리스(keystore.properties 필요)
 ```
 
-Expo Go 로는 열리지 않는다(아고라·Firebase 등 네이티브 모듈). 개발 빌드("잇다" 앱)를 설치해 그 앱으로 연다.
+Expo Go 로는 열리지 않는다(LiveKit·Firebase 등 네이티브 모듈). 개발 빌드("잇다" 앱)를 설치해 그 앱으로 연다.
 빌드 전에 `.env`(`.env.example` 복사)와 `google-services.json` 이 프로젝트 루트에 있어야 한다. 후자가 없으면 prebuild 가 실패한다.
 
 딥링크로 화면 바로 열기: `adb shell am start -a android.intent.action.VIEW -d "itda://item/78" store.idta.app`

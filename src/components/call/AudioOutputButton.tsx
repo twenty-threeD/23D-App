@@ -3,7 +3,7 @@ import { Platform } from 'react-native'
 import { MaterialIcons } from '@expo/vector-icons'
 import OptionSheet, { type SheetOption } from '@/components/ui/OptionSheet'
 import { colors } from '@/constants/theme'
-import type { AudioOutput } from '@/lib/agoraEngine'
+import type { AudioOutput } from '@/lib/callEngine'
 import { useCallStore } from '@/store/callStore'
 import CallButton from './CallButton'
 
@@ -22,11 +22,13 @@ const OUTPUT_ICON: Record<AudioOutput, keyof typeof MaterialIcons.glyphMap> = {
 }
 
 // 통화 소리가 나올 곳. 웹 브라우저와 달리 휴대폰은 수화부·스피커를 고를 수 있고, 이어폰·블루투스가 붙으면 SDK 가 그쪽으로 돌린다.
+// SDK 가 경로 변화를 알려주지 않아, 누를 때마다 붙어 있는 장치를 다시 확인하고 나서 고르게 한다.
 // 따로 붙은 기기가 없으면 눌러서 수화부↔스피커를 바로 바꾸고, 있으면 목록에서 고르게 한다(휴대폰 전화 앱과 같은 방식)
 export default function AudioOutputButton({ size }: { size?: 'sm' }) {
   const audioOutput = useCallStore((s) => s.audioOutput)
   const externalOutput = useCallStore((s) => s.externalOutput)
   const selectAudioOutput = useCallStore((s) => s.selectAudioOutput)
+  const refreshAudioOutputs = useCallStore((s) => s.refreshAudioOutputs)
   const [open, setOpen] = useState(false)
 
   // iOS 는 스피커를 끄면 시스템이 연결된 기기로 돌려줘서, 이어폰이 붙어 있는 동안 수화부를 따로 고를 수 없다
@@ -49,12 +51,14 @@ export default function AudioOutputButton({ size }: { size?: 'sm' }) {
         tone={audioOutput === 'earpiece' ? 'normal' : 'on'}
         size={size}
         showLabel={size !== 'sm'}
-        onPress={() => {
-          if (externalOutput) setOpen(true)
-          else selectAudioOutput(audioOutput === 'speaker' ? 'earpiece' : 'speaker')
+        onPress={async () => {
+          await refreshAudioOutputs()
+          const { externalOutput: external, audioOutput: current } = useCallStore.getState()
+          if (external) setOpen(true)
+          else void selectAudioOutput(current === 'speaker' ? 'earpiece' : 'speaker')
         }}
       />
-      <OptionSheet visible={open} options={options} value={audioOutput} onSelect={selectAudioOutput} onClose={() => setOpen(false)} title="소리 출력" />
+      <OptionSheet visible={open} options={options} value={audioOutput} onSelect={(output) => void selectAudioOutput(output)} onClose={() => setOpen(false)} title="소리 출력" />
     </>
   )
 }
