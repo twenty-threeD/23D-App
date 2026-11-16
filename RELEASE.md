@@ -48,7 +48,7 @@ keyPassword=…
 ```
 
 배포 빌드에는 휴대폰용 ARM(`armeabi-v7a`, `arm64-v8a`)만 넣는다(`expo-build-properties`).
-통화(아고라) 네이티브 라이브러리가 커서, 에뮬레이터용 x86 까지 넣으면 용량이 크게 늘어난다.
+통화(LiveKit WebRTC) 네이티브 라이브러리가 커서, 에뮬레이터용 x86 까지 넣으면 용량이 크게 늘어난다.
 
 서명 확인:
 
@@ -94,7 +94,7 @@ $ANDROID_HOME/build-tools/<버전>/apksigner verify --print-certs android/app/bu
 - **빌드하려면 Xcode 26.4 이상이 필요하다**(Expo SDK 57 요구 사항). 26.0 에서는 `expo-modules-jsi` 의 Swift 6.2 문법(`weak let`)에서 막힌다
 - 시뮬레이터 실행: `npx expo run:ios --device "iPhone 17"`
 - 실기기·앱스토어: Apple Developer 팀 가입 후 Xcode 에서 서명 팀 지정, `ios/` 는 생성물이라 서명은 EAS Build 나 config plugin 으로 넣는다
-- 통화 화면공유(보내기)는 방송 확장(ReplayKit Broadcast Upload Extension)으로 한다. 확장은 `targets/ScreenShare` 에 있고
-  `@bacons/apple-targets` 가 prebuild 때 Xcode 타깃(`store.idta.app.ScreenShare`)으로 만든다. 확장에는 아고라 `AgoraRtcEngine_iOS/ReplayKit` 만 들어간다(`targets/ScreenShare/pods.rb`)
-  - 실기기에서만 된다(시뮬레이터는 ReplayKit 방송을 못 한다). 서명할 때 확장 타깃에도 같은 팀을 지정한다(`ios.appleTeamId`)
-- 소리 출력: 안드로이드는 수화부·스피커·이어폰·블루투스를 고를 수 있고, iOS 는 스피커 켜고 끄기만 된다(아고라 API 차이)
+- 통화 화면공유(보내기)는 iOS 에서 아직 지원하지 않는다(버튼을 숨긴다). LiveKit 은 방송 확장(ReplayKit Broadcast Upload Extension)이
+  App Group 공유 폴더로 화면을 넘겨야 해서, 유료 Apple Developer 계정으로 App Group 을 만든 뒤 확장을 다시 붙여야 한다
+  (`@livekit/react-native-webrtc` 가 Info.plist 의 `RTCAppGroupIdentifier`·`RTCScreenSharingExtension` 을 읽는다)
+- 소리 출력: 안드로이드는 수화부·스피커·이어폰·블루투스를 고를 수 있고, iOS 는 스피커 켜고 끄기만 된다(LiveKit `AudioSession` 이 iOS 에서 이 둘만 준다)

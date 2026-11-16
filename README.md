@@ -52,7 +52,7 @@ cp .env.example .env
 
 ### 3. 실행 (개발 빌드)
 
-통화(Agora)·결제(WebView) 같은 네이티브 모듈을 쓰므로 Expo Go 대신 **개발 빌드**로 실행합니다.
+통화(LiveKit)·결제(WebView) 같은 네이티브 모듈을 쓰므로 Expo Go 대신 **개발 빌드**로 실행합니다.
 Android Studio(SDK)와 JDK 17 이상이 필요합니다.
 
 ```bash

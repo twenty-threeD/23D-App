@@ -1,9 +1,9 @@
 import { throwApiError } from './apiError'
 import { apiUrl } from './http'
 
-// 아고라 통화 REST 래퍼.
-// 서버는 토큰 발급 + 시그널링(STOMP /user/queue/call)까지만 하고,
-// 실제 미디어 송수신은 전부 클라이언트(agoraEngine.ts) 몫이다.
+// LiveKit 통화 REST 래퍼.
+// 서버는 LiveKit 접속 토큰 발급 + 시그널링(STOMP /user/queue/call)까지만 하고,
+// 실제 미디어 송수신은 전부 클라이언트(callEngine.ts)와 직접 운영하는 LiveKit 서버 몫이다.
 
 export type CallType = 'VOICE' | 'VIDEO'
 export type CallStatus = 'RINGING' | 'ACCEPTED' | 'REJECTED' | 'CANCELED' | 'MISSED' | 'ENDED'
@@ -24,9 +24,8 @@ export interface CallParticipant {
   username: string
   name: string
   imageUrl?: string | null
-  // 아고라 채널 안에서의 식별자. 카메라용 uid 와 화면공유용 screenUid 가 따로 있다.
-  uid: number
-  screenUid: number
+  // LiveKit 방 안에서의 식별자. 카메라·마이크·화면공유가 모두 이 참여자의 트랙이라 하나뿐이다.
+  identity: string
   audioEnabled: boolean
   videoEnabled: boolean
   screenSharing: boolean
@@ -45,13 +44,13 @@ export interface Call {
   durationSeconds: number | null
 }
 
-// 채널 접속에 필요한 것이 한 번에 온다 (POST /api/call, /accept, /token)
-// Agora 채널 접속 정보. 발신·수락·토큰 갱신 응답에는 통화와 함께, 진행 중 통화 조회에는 따로 담겨 온다
+// LiveKit 방 접속 정보. 발신·수락 응답에는 통화와 함께, 진행 중 통화 조회에는 따로 담겨 온다.
+// 방 이름과 identity 는 토큰 안에도 들어 있어, 접속에는 serverUrl 과 token 만 쓴다
 export interface CallConnection {
-  appId: string
-  channelName: string
-  uid: number
-  rtcToken: string
+  serverUrl: string
+  roomName: string
+  identity: string
+  token: string
   tokenExpiresAt: string
 }
 
@@ -64,16 +63,6 @@ export interface CallSession extends CallConnection {
 export interface ActiveCall {
   call: Call
   connection: CallConnection | null
-}
-
-// 화면공유는 같은 채널에 별도 uid 로 한 번 더 접속하는 방식이라 전용 토큰을 따로 받는다
-export interface ScreenShareSession {
-  call: Call
-  appId: string
-  channelName: string
-  screenUid: number
-  rtcToken: string
-  tokenExpiresAt: string
 }
 
 export interface CallSignalEvent {
@@ -130,7 +119,7 @@ export function endCall(token: string, callId: number) {
 }
 
 // 로컬에서 껐다 켜는 것과 별개로, 상대 화면의 마이크/카메라 아이콘을 갱신하려면 서버에 알려야 한다.
-// 토큰에 영상 권한이 이미 들어 있어서 음성으로 건 통화도 재발급 없이 카메라를 켤 수 있다.
+// 토큰에 영상·화면공유 권한이 이미 들어 있어서 음성으로 건 통화도 재발급 없이 카메라를 켤 수 있다.
 export function updateCallMedia(
   token: string,
   callId: number,
@@ -142,12 +131,10 @@ export function updateCallMedia(
   })
 }
 
-export function renewCallToken(token: string, callId: number) {
-  return request<CallSession>(`/api/call/${callId}/token`, token, { method: 'POST' })
-}
-
+// 화면공유 점유만 잡는다. 별도 토큰 없이 지금 접속에서 화면공유 트랙을 publish 하면 된다.
+// 한 번에 한 명만 공유하도록 서버가 막아 주므로, publish 전에 반드시 먼저 부른다
 export function startScreenShare(token: string, callId: number) {
-  return request<ScreenShareSession>(`/api/call/${callId}/screen-share`, token, { method: 'POST' })
+  return request<Call>(`/api/call/${callId}/screen-share`, token, { method: 'POST' })
 }
 
 // 빼먹으면 서버에 점유 상태가 남아 상대가 화면공유를 못 한다

@@ -4,12 +4,13 @@ import { Image } from 'expo-image'
 import { StatusBar } from 'expo-status-bar'
 import { MaterialIcons } from '@expo/vector-icons'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
-import { RenderModeType, RtcSurfaceView, VideoMirrorModeType } from 'react-native-agora'
+import { VideoTrack } from '@livekit/react-native'
 import Text from '@/components/ui/Text'
 import { colors } from '@/constants/theme'
 import { useAuthStore } from '@/store/authStore'
 import { useCallStore } from '@/store/callStore'
 import { participantsOf } from '@/lib/call'
+import { callEngine, canShareScreen, type CallTrackRef } from '@/lib/callEngine'
 import { toAbsoluteUrl } from '@/lib/file'
 import { useSpeaking } from '@/hooks/useSpeaking'
 import { useCallElapsed } from '@/hooks/useCallClock'
@@ -48,14 +49,14 @@ export function CallPulse({ size, delay = 0, color = 'rgba(255,255,255,0.25)' }:
   )
 }
 
-type Tile = { key: 'screen' | 'peer' | 'me'; uid: number; label: string }
+type Tile = { key: 'screen' | 'peer' | 'me'; trackRef: CallTrackRef; label: string }
 
 // 웹 call/CallOverlay. 통화 전체화면. 벨만 울릴 때는 화면을 덮지 않고(도크가 맡는다), 건 쪽·통화 중·영상이 붙었을 때 뜬다
 export default function CallOverlay() {
   const insets = useSafeAreaInsets()
   const token = useAuthStore((s) => s.accessToken)
   const state = useCallStore()
-  const { phase, call, myUsername, peerNameHint, peerImageUrl, micOn, camOn, screenOn, busy, remoteCamUid, remoteScreenUid, activeSince, peerReconnecting, expanded } =
+  const { phase, call, myUsername, peerNameHint, peerImageUrl, micOn, camOn, screenOn, busy, remoteCamTrack, remoteScreenTrack, activeSince, peerReconnecting, expanded, cameraFacing } =
     state
   const elapsed = useCallElapsed(phase === 'active' ? activeSince : null)
   const speaking = useSpeaking(phase === 'active')
@@ -82,10 +83,13 @@ export default function CallOverlay() {
   const statusText = callStatusText(phase, call?.callType, peerReconnecting, elapsed)
 
   const tiles: Tile[] = []
-  if (remoteScreenUid != null) tiles.push({ key: 'screen', uid: remoteScreenUid, label: '화면 공유' })
-  if (remoteCamUid != null) tiles.push({ key: 'peer', uid: remoteCamUid, label: peerName })
-  // 내 카메라는 uid 0 으로 그린다
-  if (camOn) tiles.push({ key: 'me', uid: 0, label: '나' })
+  if (remoteScreenTrack) tiles.push({ key: 'screen', trackRef: remoteScreenTrack, label: '화면 공유' })
+  if (remoteCamTrack) tiles.push({ key: 'peer', trackRef: remoteCamTrack, label: peerName })
+  // 내 카메라는 엔진이 들고 있는 참조로 그린다. 켜는 중이라 아직 publish 전이면 잠깐 빠진다
+  const localCam = camOn ? callEngine.localCameraRef : null
+  if (localCam) tiles.push({ key: 'me', trackRef: localCam, label: '나' })
+  // 앞 카메라만 거울처럼 뒤집는다. 뒤 카메라까지 뒤집으면 글자·방향이 반대로 보인다
+  const mirrorOf = (key: Tile['key']) => key === 'me' && cameraFacing === 'user'
   const mainTile = tiles.find((tile) => tile.key === focusKey) ?? tiles[0] ?? null
   const pips = tiles.filter((tile) => tile !== mainTile)
   const isSpeaking = (key: Tile['key']) => (key === 'peer' && speaking.peer) || (key === 'me' && speaking.me)
@@ -150,14 +154,12 @@ export default function CallOverlay() {
         {mainTile ? (
           <View style={[styles.mainVideo, isSpeaking(mainTile.key) && styles.speakingRing]}>
             {/* 가로·세로 영상이 섞여 오므로 큰 화면은 자르지 않고 전부 보여준다 */}
-            <RtcSurfaceView
+            <VideoTrack
               key={`main-${mainTile.key}`}
+              trackRef={mainTile.trackRef}
               style={StyleSheet.absoluteFill}
-              canvas={{
-                uid: mainTile.uid,
-                renderMode: RenderModeType.RenderModeFit,
-                mirrorMode: mainTile.key === 'me' ? VideoMirrorModeType.VideoMirrorModeAuto : VideoMirrorModeType.VideoMirrorModeDisabled,
-              }}
+              objectFit="contain"
+              mirror={mirrorOf(mainTile.key)}
             />
             {pips.length > 0 ? (
               <View style={styles.pips}>
@@ -169,15 +171,13 @@ export default function CallOverlay() {
                     style={[styles.pip, isSpeaking(pip.key) && styles.speakingRingSmall]}
                   >
                     {/* 겹친 작은 영상이 큰 영상 아래로 숨지 않도록 위층에 그린다(안드로이드 SurfaceView) */}
-                    <RtcSurfaceView
+                    <VideoTrack
                       key={`pip-${pip.key}`}
-                      zOrderMediaOverlay
+                      trackRef={pip.trackRef}
+                      zOrder={1}
                       style={StyleSheet.absoluteFill}
-                      canvas={{
-                        uid: pip.uid,
-                        renderMode: pip.key === 'screen' ? RenderModeType.RenderModeFit : RenderModeType.RenderModeHidden,
-                        mirrorMode: pip.key === 'me' ? VideoMirrorModeType.VideoMirrorModeAuto : VideoMirrorModeType.VideoMirrorModeDisabled,
-                      }}
+                      objectFit={pip.key === 'screen' ? 'contain' : 'cover'}
+                      mirror={mirrorOf(pip.key)}
                     />
                     <View style={styles.pipLabel}>
                       <Text color={colors.white} style={styles.pipLabelText}>
@@ -231,15 +231,17 @@ export default function CallOverlay() {
             {/* 음성으로 걸었어도 그냥 켜진다. 토큰에 영상 권한이 이미 들어 있다 */}
             <CallButton icon={camOn ? 'videocam' : 'videocam-off'} label="카메라" tone={camOn ? 'normal' : 'off'} disabled={!call || busy} onPress={act(state.toggleCam)} />
             {camOn ? <CallButton icon="cameraswitch" label="전환" disabled={busy} onPress={() => void state.flipCamera()} /> : null}
-            {/* 안드로이드는 SDK 가 화면 캡처 권한·서비스를 맡고, iOS 는 방송 확장(targets/ScreenShare)이 화면을 찍어 넘긴다.
+            {/* 안드로이드는 SDK 가 화면 캡처 권한·포그라운드 서비스를 맡는다. iOS 는 방송 확장이 아직 없어 버튼을 숨긴다(엔진 canShareScreen).
                 내 화면은 그리지 않는다 — 공유 중인 화면 안에 다시 그 화면이 비쳐 끝없이 겹친다 */}
-            <CallButton
-              icon={screenOn ? 'stop-screen-share' : 'screen-share'}
-              label="화면 공유"
-              tone={screenOn ? 'on' : 'normal'}
-              disabled={!call || busy || phase !== 'active' || (!!peer?.screenSharing && !screenOn)}
-              onPress={act(state.toggleScreen)}
-            />
+            {canShareScreen() ? (
+              <CallButton
+                icon={screenOn ? 'stop-screen-share' : 'screen-share'}
+                label="화면 공유"
+                tone={screenOn ? 'on' : 'normal'}
+                disabled={!call || busy || phase !== 'active' || (!!peer?.screenSharing && !screenOn)}
+                onPress={act(state.toggleScreen)}
+              />
+            ) : null}
             <AudioOutputButton />
             <CallButton icon="call-end" label="종료" tone="danger" onPress={act(state.hangUp)} />
           </>

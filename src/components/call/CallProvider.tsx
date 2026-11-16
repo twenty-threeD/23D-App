@@ -3,7 +3,7 @@ import { AppState } from 'react-native'
 import { toast } from '@/components/ui/Toast'
 import { useAuthStore, decodeJwtUsername } from '@/store/authStore'
 import { useCallStore } from '@/store/callStore'
-import { callEngine } from '@/lib/agoraEngine'
+import { callEngine } from '@/lib/callEngine'
 import { createStompClient } from '@/lib/stomp'
 import { playHangupTone, startRingtone, stopRingtone } from '@/lib/ringtone'
 import type { CallSignalEvent } from '@/lib/call'
@@ -42,11 +42,7 @@ export default function CallProvider() {
 
   useEffect(() => {
     callEngine.setHandlers({
-      onRemoteVideo: (kind, uid) => useCallStore.getState().setRemoteVideo(kind, uid),
-      onTokenExpiring: () => {
-        const t = tokenRef.current
-        if (t) void useCallStore.getState().renew(t)
-      },
+      onRemoteVideo: (kind, trackRef) => useCallStore.getState().setRemoteVideo(kind, trackRef),
       // 상대가 앱을 끄거나 네트워크가 끊기면 종료 신호 없이 채널에서만 사라진다. 곧 돌아올 수 있어 기다린다
       onPeerLeft: () => useCallStore.getState().handlePeerLeft(() => tokenRef.current),
       onPeerJoined: () => useCallStore.getState().handlePeerJoined(),
@@ -55,7 +51,14 @@ export default function CallProvider() {
         const t = tokenRef.current
         if (t && useCallStore.getState().screenOn) void useCallStore.getState().toggleScreen(t)
       },
-      onAudioOutput: (output) => useCallStore.getState().setAudioOutput(output),
+      // 내 쪽 접속만 끊긴 것이라 서버 통화는 끊지 않고 화면만 닫는다(웹과 같다).
+      // 같은 통화를 다른 기기에서 다시 연 경우에도 여기로 오는데, 이때 서버 통화를 끊으면 그쪽 통화까지 끝난다
+      onDisconnected: () => {
+        const store = useCallStore.getState()
+        if (store.phase === 'idle') return
+        store.setNotice('통화 연결이 끊어졌어요.')
+        void store.reset()
+      },
       onError: (message) => useCallStore.getState().setError(message),
     })
   }, [])
